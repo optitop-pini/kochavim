@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<!--
+  ============================================================
+   משחק: כוכבים נופלים  ⭐
+   נבנה עבור עומר כדי ללמוד לתכנת עם Claude Code
+  ============================================================
+
+  איך משחקים?
+  - מזיזים את הסלסלה ימינה ושמאלה עם החיצים במקלדת (או עם העכבר / האצבע בנייד).
+  - תופסים כוכבים שנופלים מלמעלה — כל כוכב = נקודה.
+  - אם כוכב נופל לרצפה — מאבדים "חיים". יש 3 חיים.
+
+  --- אזור ההגדרות למטה (ALL CAPS) זה המקום הכי כיף לשחק איתו ---
+  שנו את המספרים, שמרו, ורעננו את הדף בדפדפן כדי לראות מה קרה.
+-->
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>כוכבים נופלים ⭐</title>
+  <style>
+    /* ====== עיצוב המסך ====== */
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Arial, sans-serif;
+      background: linear-gradient(#0b1026, #1b2a6b);
+      color: white;
+      text-align: center;
+      overflow: hidden;
+      user-select: none;
+    }
+    h1 { margin: 10px 0 4px; font-size: 24px; }
+    #lhuh { font-size: 14px; opacity: .8; margin: 0 0 8px; }
+    #scoreboard {
+      font-size: 20px;
+      margin: 6px;
+    }
+    canvas {
+      background: linear-gradient(#0b1026, #243b8f);
+      border: 3px solid #42bbc8;
+      border-radius: 12px;
+      display: block;
+      margin: 0 auto;
+      max-width: 96vw;
+      touch-action: none;
+    }
+    #startScreen {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(0,0,0,.8);
+      padding: 26px 36px;
+      border-radius: 16px;
+      font-size: 22px;
+      border: 2px solid #42bbc8;
+    }
+    #screenMessage { font-size: 20px; margin-bottom: 8px; color: #fbbc46; }
+    #screenTitle  { font-size: 24px; margin-bottom: 16px; font-weight: bold; }
+    .diffBtn {
+      display: block;
+      width: 200px;
+      margin: 10px auto;
+      padding: 12px 22px;
+      font-size: 20px;
+      border: none;
+      border-radius: 10px;
+      background: #fbbc46;
+      color: #282355;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    .diffBtn:hover { background: #ffd277; }
+  </style>
+</head>
+<body>
+
+  <h1>⭐ כוכבים נופלים ⭐</h1>
+  <p id="lhuh">הזיזו את הסלסלה עם החיצים ← → ותפסו כוכבים!</p>
+  <div id="scoreboard">רמה: <span id="level">קל 🟢</span> &nbsp;|&nbsp; ניקוד: <span id="score">0</span> / <span id="target">40</span> &nbsp;|&nbsp; חיים: <span id="lives">❤️❤️❤️❤️❤️</span> &nbsp;|&nbsp; 🏆 שיא: <span id="highScore">0</span></div>
+
+  <canvas id="game" width="600" height="500"></canvas>
+
+  <div id="startScreen">
+    <div id="screenMessage"></div>
+    <div id="screenButtons"></div>
+  </div>
+
+  <script>
+  // =========================================================
+  //  אזור ההגדרות — כאן הכי כיף לשנות! ⚙️
+  //  (נסו לשנות מספר, לשמור, ולרענן את הדף)
+  // =========================================================
+  // לכל רמת קושי יש מספרים משלה. שנו אותם, שמרו, ובחרו את הרמה במסך הפתיחה.
+  const DIFFICULTIES = {
+    easy: {                 // קל 🟢
+      name: "קל 🟢",
+      target: 40,           // כמה כוכבים צריך לאסוף כדי לעבור לרמה הבאה
+      next: "medium",       // הרמה הבאה אחרי שמסיימים
+      lives: 5,             // כמה לבבות מתחילים איתם
+      basketWidth: 120,     // רוחב הסלסלה (גדול = קל יותר לתפוס)
+      starSpeed: 2,         // מהירות נפילת הכוכבים
+      starRate: 70,         // כל כמה זמן נופל כוכב (מספר קטן = יותר כוכבים)
+      mineSpeed: 2.5,       // מהירות נפילת המוקשים
+      mineRate: 260,        // כל כמה זמן נופל מוקש (מספר גדול = פחות מוקשים)
+    },
+    medium: {               // בינוני 🟡
+      name: "בינוני 🟡",
+      target: 30,
+      next: "hard",
+      lives: 4,
+      basketWidth: 90,
+      starSpeed: 3,
+      starRate: 60,
+      mineSpeed: 3.5,
+      mineRate: 150,
+    },
+    hard: {                 // קשה 🔴
+      name: "קשה 🔴",
+      target: 15,
+      next: null,           // אין רמה הבאה — מי שמסיים את "קשה" מנצח!
+      lives: 3,
+      basketWidth: 65,
+      starSpeed: 4.5,
+      starRate: 45,
+      mineSpeed: 5,
+      mineRate: 90,
+    },
+  };
+
+  // הגדרות שלא משתנות בין הרמות:
+  const BASKET_SPEED = 7;    // מהירות תזוזת הסלסלה
+  const STAR_SIZE    = 22;   // גודל הכוכב
+  const MINE_SIZE    = 18;   // גודל המוקש
+
+  // אלה ימולאו לפי הרמה שנבחרת (מתחילים עם ערכי "בינוני" כברירת מחדל)
+  let STARTING_LIVES  = DIFFICULTIES.medium.lives;
+  let BASKET_WIDTH    = DIFFICULTIES.medium.basketWidth;
+  let STAR_FALL_SPEED = DIFFICULTIES.medium.starSpeed;
+  let STAR_SPAWN_RATE = DIFFICULTIES.medium.starRate;
+  let MINE_FALL_SPEED = DIFFICULTIES.medium.mineSpeed;
+  let MINE_SPAWN_RATE = DIFFICULTIES.medium.mineRate;
+
+  // =========================================================
+  //  מכאן והלאה זה ה"מנוע" של המשחק.
+  //  אפשר להציץ, ובהמשך גם לשנות — אבל לא חובה כדי לשחק.
+  // =========================================================
+
+  const canvas = document.getElementById("game");
+  const ctx = canvas.getContext("2d");
+  const scoreEl = document.getElementById("score");
+  const targetEl = document.getElementById("target");
+  const levelEl = document.getElementById("level");
+  const livesEl = document.getElementById("lives");
+  const highScoreEl = document.getElementById("highScore");
+  const startScreen = document.getElementById("startScreen");
+  const screenMessage = document.getElementById("screenMessage");
+  const screenButtons = document.getElementById("screenButtons");
+
+  let basketX, score, lives, stars, mines, frameCount, isPlaying;
+  let currentLevel = "easy";   // הרמה שבה משחקים כרגע (תמיד מתחילים מ"קל")
+  let moveLeft = false, moveRight = false;
+
+  // טוענים את השיא מהזיכרון של הדפדפן (אם אין עדיין — מתחילים מ-0).
+  // localStorage שומר את המספר גם אחרי שסוגרים את הדף או מכבים את המחשב.
+  let highScore = Number(localStorage.getItem("starsHighScore")) || 0;
+
+  // =========================================================
+  //  מנוע הצלילים 🔊
+  //  הצלילים נוצרים מתוך הדפדפן עצמו — בלי קבצים חיצוניים.
+  //  כל צליל הוא רצף של "צפצופים" (תווים) שמתנגנים אחד אחרי השני.
+  // =========================================================
+  let audioCtx;  // נפתח בלחיצה הראשונה (הדפדפן דורש זאת)
+
+  // מנגן תו בודד: תדר (גובה הצליל), מתי להתחיל, וכמה זמן
+  function playTone(frequency, startTime, duration) {
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = "triangle";              // סוג הצליל (נסו: "sine" / "square" / "sawtooth")
+    osc.frequency.value = frequency;
+    gain.gain.setValueAtTime(0.25, startTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration); // דעיכה רכה
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start(startTime);
+    osc.stop(startTime + duration);
+  }
+
+  // מנגן רצף תווים (מנגינה קטנה)
+  function playMelody(notes) {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    let t = audioCtx.currentTime;
+    for (const note of notes) {
+      playTone(note.freq, t, note.dur);
+      t += note.dur;
+    }
+  }
+
+  // צליל ניצחון 🎉 — מנגינה עולה ושמחה (כשתופסים כוכב)
+  function playWinSound() {
+    playMelody([
+      { freq: 660, dur: 0.10 },   // מי
+      { freq: 880, dur: 0.14 },   // לה (גבוה יותר)
+    ]);
+  }
+
+  // צליל כישלון 😢 — מנגינה יורדת ועצובה (כשהמשחק נגמר)
+  function playLoseSound() {
+    playMelody([
+      { freq: 392, dur: 0.18 },   // סול
+      { freq: 311, dur: 0.18 },   // מי במול
+      { freq: 196, dur: 0.30 },   // סול נמוך
+    ]);
+  }
+
+  // צליל פאנפרה 🎺 — מנגינה עולה וחגיגית (מעבר שלב / ניצחון)
+  function playFanfareSound() {
+    playMelody([
+      { freq: 523, dur: 0.12 },   // דו
+      { freq: 659, dur: 0.12 },   // מי
+      { freq: 784, dur: 0.12 },   // סול
+      { freq: 1047, dur: 0.28 },  // דו גבוה
+    ]);
+  }
+
+  // --- מציג מסך עם הודעה וכפתורים ---
+  // משמש לכל המסכים: פתיחה, מעבר שלב, ניצחון וסיום.
+  // buttons = רשימה של { label, action } — לכל כפתור טקסט ופעולה ללחיצה.
+  function showScreen(message, buttons) {
+    screenMessage.innerHTML = message;
+    screenButtons.innerHTML = "";
+    for (const b of buttons) {
+      const btn = document.createElement("button");
+      btn.className = "diffBtn";
+      btn.textContent = b.label;
+      btn.onclick = b.action;
+      screenButtons.appendChild(btn);
+    }
+    startScreen.style.display = "block";
+  }
+
+  // --- מסך הפתיחה ---
+  function showStartScreen() {
+    showScreen(
+      "⭐ כוכבים נופלים ⭐<br>אספו 40 כוכבים כדי לעבור שלב!<br>היזהרו מהמוקשים 💣",
+      [ { label: "התחל משחק 🎮", action: startNewRun } ]
+    );
+  }
+
+  // --- מתחילים ריצה חדשה מההתחלה (תמיד רמת "קל") ---
+  function startNewRun() {
+    startLevel("easy");
+  }
+
+  // --- טוענים רמה מסוימת ומתחילים לשחק בה ---
+  function startLevel(level) {
+    currentLevel = level;
+    const d = DIFFICULTIES[level];   // המספרים של הרמה הזו
+    STARTING_LIVES  = d.lives;
+    BASKET_WIDTH    = d.basketWidth;
+    STAR_FALL_SPEED = d.starSpeed;
+    STAR_SPAWN_RATE = d.starRate;
+    MINE_FALL_SPEED = d.mineSpeed;
+    MINE_SPAWN_RATE = d.mineRate;
+
+    basketX = canvas.width / 2 - BASKET_WIDTH / 2;
+    score = 0;                 // הניקוד מתחיל מ-0 בכל רמה
+    lives = STARTING_LIVES;
+    stars = [];
+    mines = [];
+    frameCount = 0;
+    isPlaying = true;
+    startScreen.style.display = "none";
+    updateScoreboard();
+    loop();
+  }
+
+  // --- הגענו ליעד הנקודות! עוברים לרמה הבאה, או מנצחים ---
+  function advanceLevel() {
+    isPlaying = false;
+    playFanfareSound();              // 🎺 צליל חגיגי
+    const next = DIFFICULTIES[currentLevel].next;
+    if (next) {
+      // יש רמה הבאה — מציגים מסך מעבר שלב
+      showScreen(
+        "כל הכבוד! 🎉 סיימת את הרמה " + DIFFICULTIES[currentLevel].name +
+        "<br>הרמה הבאה: " + DIFFICULTIES[next].name,
+        [ { label: "המשך ➡️", action: () => startLevel(next) } ]
+      );
+    } else {
+      // אין רמה הבאה — ניצחון מוחלט!
+      showScreen(
+        "🏆 ניצחת! 🏆<br>עברת את כל הרמות — אלוף הכוכבים! ⭐",
+        [ { label: "שחק מחדש 🔄", action: startNewRun } ]
+      );
+    }
+  }
+
+  // --- מצייר כוכב תלת-ממדי מבריק במקום מסוים ---
+  function drawStar(x, y, size, rotation) {
+    ctx.save();
+    ctx.translate(x, y);       // מזיזים את "העט" למרכז הכוכב
+    ctx.rotate(rotation);      // מסובבים אותו — נותן תחושת תלת-ממד
+
+    // בונים את צורת הכוכב (5 קצוות חיצוניים ו-5 פנימיים)
+    ctx.beginPath();
+    for (let i = 0; i < 5; i++) {
+      const angle = (Math.PI / 2.5) * i - Math.PI / 2;
+      ctx.lineTo(Math.cos(angle) * size, Math.sin(angle) * size);
+      const inner = (Math.PI / 2.5) * i - Math.PI / 2 + Math.PI / 5;
+      ctx.lineTo(Math.cos(inner) * (size / 2), Math.sin(inner) * (size / 2));
+    }
+    ctx.closePath();
+
+    // צל מתחת לכוכב — נותן תחושה שהוא "מרחף" מעל הרקע
+    ctx.shadowColor = "rgba(0,0,0,0.5)";
+    ctx.shadowBlur = 8;
+    ctx.shadowOffsetX = 3;
+    ctx.shadowOffsetY = 4;
+
+    // מילוי במעבר צבעים (gradient): בהיר במרכז-עליון, כהה בקצה.
+    // זה הסוד שגורם לכוכב להיראות תלת-ממדי ומבריק כמו מתכת.
+    const grad = ctx.createRadialGradient(-size / 3, -size / 3, size / 8, 0, 0, size);
+    grad.addColorStop(0,   "#fff3c4");   // נקודת אור בהירה (ה"ברק")
+    grad.addColorStop(0.5, "#fbbc46");   // צהוב המותג
+    grad.addColorStop(1,   "#c8860a");   // צל כתום-כהה
+    ctx.fillStyle = grad;
+    ctx.fill();
+
+    // קו מתאר כהה — מדגיש את הקצוות ומחזק את העומק
+    ctx.shadowColor = "transparent";     // מבטלים צל בשביל הקו עצמו
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = "#a86c00";
+    ctx.stroke();
+
+    ctx.restore();             // מחזירים את ה"עט" למצב הרגיל
+  }
+
+  // --- מצייר מוקש 💣 (כדור כהה עם קוצים) ---
+  function drawMine(x, y, size) {
+    ctx.save();
+    ctx.translate(x, y);
+
+    // הקוצים מסביב למוקש
+    ctx.strokeStyle = "#e02d2d";
+    ctx.lineWidth = 3;
+    for (let i = 0; i < 8; i++) {
+      const angle = (Math.PI / 4) * i;
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(angle) * size, Math.sin(angle) * size);
+      ctx.lineTo(Math.cos(angle) * (size + 6), Math.sin(angle) * (size + 6));
+      ctx.stroke();
+    }
+
+    // גוף המוקש — כדור כהה עם מעט נפח (gradient)
+    const grad = ctx.createRadialGradient(-size / 3, -size / 3, size / 6, 0, 0, size);
+    grad.addColorStop(0, "#777");
+    grad.addColorStop(1, "#1a1a1a");
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(0, 0, size, 0, Math.PI * 2);
+    ctx.fill();
+
+    // נקודה אדומה מהבהבת במרכז — "סכנה!"
+    ctx.fillStyle = "#ff3b3b";
+    ctx.beginPath();
+    ctx.arc(0, 0, size / 4, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+  }
+
+  // --- מצייר את הסלסלה ---
+  function drawBasket() {
+    const y = canvas.height - 30;
+    ctx.fillStyle = "#42bbc8";
+    ctx.beginPath();
+    ctx.moveTo(basketX, y);
+    ctx.lineTo(basketX + BASKET_WIDTH, y);
+    ctx.lineTo(basketX + BASKET_WIDTH - 12, y + 28);
+    ctx.lineTo(basketX + 12, y + 28);
+    ctx.closePath();
+    ctx.fill();
+    // קווי הקש של הסלסלה
+    ctx.strokeStyle = "#282355";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+
+  // --- מעדכן את לוח הניקוד למעלה ---
+  function updateScoreboard() {
+    scoreEl.textContent = score;
+    targetEl.textContent = DIFFICULTIES[currentLevel].target;   // היעד של הרמה
+    levelEl.textContent = DIFFICULTIES[currentLevel].name;      // שם הרמה
+    livesEl.textContent = "❤️".repeat(lives) || "💔";
+
+    // אם הניקוד הנוכחי עבר את השיא — מעדכנים ושומרים בזיכרון
+    if (score > highScore) {
+      highScore = score;
+      localStorage.setItem("starsHighScore", highScore);
+    }
+    highScoreEl.textContent = highScore;
+  }
+
+  // --- הלולאה הראשית: רצה ~60 פעמים בשנייה ---
+  function loop() {
+    if (!isPlaying) return;
+    frameCount++;
+
+    // מנקים את המסך
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // יוצרים כוכב חדש מדי פעם, במיקום אקראי
+    if (frameCount % STAR_SPAWN_RATE === 0) {
+      const x = Math.random() * (canvas.width - STAR_SIZE * 2) + STAR_SIZE;
+      // rot = הזווית הנוכחית, spin = כמה מהר הכוכב מסתובב (אקראי לכל כוכב)
+      stars.push({ x: x, y: -STAR_SIZE, rot: 0, spin: (Math.random() - 0.5) * 0.1 });
+    }
+
+    // יוצרים מוקש חדש מדי פעם, במיקום אקראי
+    if (frameCount % MINE_SPAWN_RATE === 0) {
+      const mx = Math.random() * (canvas.width - MINE_SIZE * 2) + MINE_SIZE;
+      mines.push({ x: mx, y: -MINE_SIZE });
+    }
+
+    // מזיזים את הסלסלה לפי המקלדת
+    if (moveLeft)  basketX -= BASKET_SPEED;
+    if (moveRight) basketX += BASKET_SPEED;
+    // לא נותנים לסלסלה לצאת מהמסך
+    basketX = Math.max(0, Math.min(canvas.width - BASKET_WIDTH, basketX));
+
+    // מזיזים ומציירים כל כוכב
+    const basketY = canvas.height - 30;
+    for (let i = stars.length - 1; i >= 0; i--) {
+      const star = stars[i];
+      star.y += STAR_FALL_SPEED;
+      star.rot += star.spin;     // מסובבים את הכוכב מעט → תחושת תלת-ממד
+      drawStar(star.x, star.y, STAR_SIZE, star.rot);
+
+      // האם הכוכב נתפס בסלסלה?
+      const caught = star.y + STAR_SIZE > basketY &&
+                     star.x > basketX &&
+                     star.x < basketX + BASKET_WIDTH;
+      if (caught) {
+        score++;
+        stars.splice(i, 1);   // מוחקים את הכוכב שנתפס
+        updateScoreboard();
+        playWinSound();        // 🎉 צליל ניצחון!
+        if (score >= DIFFICULTIES[currentLevel].target) {  // הגענו ליעד?
+          advanceLevel();
+          return;
+        }
+        continue;
+      }
+
+      // האם הכוכב נפל לרצפה?
+      if (star.y > canvas.height) {
+        stars.splice(i, 1);
+        lives--;
+        updateScoreboard();
+        if (lives <= 0) {
+          gameOver();
+          return;
+        }
+      }
+    }
+
+    // מזיזים ומציירים כל מוקש
+    for (let i = mines.length - 1; i >= 0; i--) {
+      const mine = mines[i];
+      mine.y += MINE_FALL_SPEED;
+      drawMine(mine.x, mine.y, MINE_SIZE);
+
+      // האם הסלסלה תפסה מוקש? אם כן — מאבדים לב אחד! 💥
+      const hit = mine.y + MINE_SIZE > basketY &&
+                  mine.x > basketX &&
+                  mine.x < basketX + BASKET_WIDTH;
+      if (hit) {
+        mines.splice(i, 1);     // המוקש התפוצץ — מוחקים אותו
+        lives--;                // מאבדים לב אחד
+        updateScoreboard();
+        if (lives <= 0) {       // רק אם נגמרו כל הלבבות — סוף משחק
+          gameOver();
+          return;
+        }
+        playLoseSound();        // צליל "אאוץ'" על הפגיעה
+        continue;
+      }
+
+      // מוקש שנפל לרצפה בלי שנתפס — התחמקנו ממנו, פשוט מוחקים אותו
+      if (mine.y > canvas.height) {
+        mines.splice(i, 1);
+      }
+    }
+
+    drawBasket();
+    requestAnimationFrame(loop);   // מבקשים לצייר את הפריים הבא
+  }
+
+  // --- סוף משחק ---
+  function gameOver() {
+    isPlaying = false;
+    playLoseSound();           // 😢 צליל כישלון!
+    showScreen(
+      "המשחק נגמר 🌟<br>הגעת לרמה " + DIFFICULTIES[currentLevel].name +
+      " עם " + score + " כוכבים",
+      [ { label: "נסה שוב מההתחלה 🔄", action: startNewRun } ]
+    );
+  }
+
+  // ====== שליטה במקלדת ======
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowLeft")  moveLeft = true;
+    if (e.key === "ArrowRight") moveRight = true;
+  });
+  document.addEventListener("keyup", (e) => {
+    if (e.key === "ArrowLeft")  moveLeft = false;
+    if (e.key === "ArrowRight") moveRight = false;
+  });
+
+  // ====== שליטה בעכבר ובמגע (לנייד) ======
+  function moveBasketTo(clientX) {
+    const rect = canvas.getBoundingClientRect();
+    const scale = canvas.width / rect.width;
+    basketX = (clientX - rect.left) * scale - BASKET_WIDTH / 2;
+  }
+  canvas.addEventListener("mousemove", (e) => moveBasketTo(e.clientX));
+  canvas.addEventListener("touchmove", (e) => {
+    moveBasketTo(e.touches[0].clientX);
+    e.preventDefault();
+  }, { passive: false });
+
+  // כשהדף נטען — מציגים את מסך בחירת הרמה (המשחק מתחיל רק אחרי בחירה)
+  showStartScreen();
+  </script>
+</body>
+</html>
