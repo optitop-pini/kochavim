@@ -83,6 +83,8 @@
       background: #0b1026;
       color: white;
     }
+    .nameRow input.invalid { border-color: #ff5e5e; }
+    .nameError { color: #ff5e5e; font-size: 14px; min-height: 18px; margin-top: 4px; }
     #leaderboardBox { margin-top: 14px; font-size: 16px; }
     .lbTitle { font-weight: bold; margin-bottom: 6px; color: #fbbc46; }
     .lbRow { margin: 2px 0; }
@@ -436,6 +438,7 @@
     screenMessage.innerHTML =
       "⭐ כוכבים נופלים ⭐<br>אספו 20 כוכבים כדי לעבור שלב!<br>היזהרו מהמוקשים 💣" +
       '<div class="nameRow">השם שלי: <input id="playerNameInput" type="text" maxlength="12" placeholder="הקלידו שם"></div>' +
+      '<div class="nameError" id="nameError"></div>' +
       renderLeaderboard();
     document.getElementById("playerNameInput").value = savedName;
 
@@ -449,10 +452,22 @@
     startScreen.style.display = "block";
   }
 
-  // --- מתחילים ריצה חדשה מההתחלה (תמיד רמת "קל") ---
+  // --- מתחילים ריצה חדשה מההתחלה (תמיד רמת "קל") --- שם שחקן הוא שדה חובה
   function startNewRun() {
     const input = document.getElementById("playerNameInput");
-    playerName = (input && input.value.trim()) || "שחקן אלמוני";
+    const name = input ? input.value.trim() : "";
+    const errorEl = document.getElementById("nameError");
+
+    if (!name) {   // בלי שם — לא מתחילים, ומראים הודעה
+      if (errorEl) errorEl.textContent = "נא להקליד שם לפני שמתחילים ✏️";
+      if (input) { input.classList.add("invalid"); input.focus(); }
+      return;
+    }
+
+    if (input) input.classList.remove("invalid");
+    if (errorEl) errorEl.textContent = "";
+
+    playerName = name;
     localStorage.setItem("starsPlayerName", playerName);   // זוכרים את השם לפעם הבאה
     totalScore = 0;                                        // מאפסים את סך הניקוד לריצה חדשה
     startLevel("easy");
