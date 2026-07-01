@@ -193,51 +193,54 @@
   let highScore = Number(localStorage.getItem("starsHighScore")) || 0;
 
   // =========================================================
-  //  רקעי חלל 🌌 — כוכבי לכת מצוירים בקוד (בלי קבצי תמונה חיצוניים)
+  //  רקעי חלל 🌌 — תמונות אמיתיות של נאס"א (NASA), מוצגות מעל שמיים+כוכבים מצוירים
   //  אינדקסים 0-1 = קל/בינוני, אינדקסים 2-5 = מתחלפים ברמת קשה
   // =========================================================
   const SPACE_THEMES = [
-    { // 0: ערפילית סגולה — רמת קל
-      skyTop: "#1a0933", skyBottom: "#3b1266",
-      planets: [
-        { x: 480, y: 100, r: 70, light: "#c9a6ff", dark: "#5b2a91" },
-        { x: 100, y: 380, r: 40, light: "#8fd9ff", dark: "#1c5c86" },
-      ],
+    { // 0: ערפילית הטרנטולה — רמת קל (תמונה שממלאת את כל הרקע)
+      mode: "field", file: "space/0_nebula.jpg", img: new Image(),
     },
-    { // 1: ירח כתום — רמת בינוני
-      skyTop: "#1b0f08", skyBottom: "#4a1f0a",
-      planets: [
-        { x: 150, y: 110, r: 85, light: "#ffcf8a", dark: "#a4460c" },
-        { x: 470, y: 400, r: 30, light: "#e8e8e8", dark: "#7d7d7d" },
-      ],
+    { // 1: צדק (יופיטר) עם הכתם האדום הגדול — רמת בינוני
+      mode: "circle", skyTop: "#1b1710", skyBottom: "#050402",
+      x: 430, y: 150, r: 95, file: "space/1_jupiter.jpg", img: new Image(),
     },
-    { // 2: כוכב קרח — רמת קשה (מתחלף 1)
-      skyTop: "#031627", skyBottom: "#0c3a52",
-      planets: [
-        { x: 460, y: 130, r: 75, light: "#bdfbff", dark: "#1b7fa1", ring: true, ringColor: "#eaffff" },
-      ],
+    { // 2: אורנוס — רמת קשה (מתחלף 1)
+      mode: "circle", skyTop: "#03181c", skyBottom: "#01080a",
+      x: 150, y: 150, r: 90, file: "space/2_uranus.jpg", img: new Image(),
     },
-    { // 3: עולם ירוק זר — רמת קשה (מתחלף 2)
-      skyTop: "#02150c", skyBottom: "#0a3d22",
-      planets: [
-        { x: 120, y: 130, r: 65, light: "#baffb0", dark: "#1c7a3e" },
-        { x: 480, y: 370, r: 45, light: "#fff4a3", dark: "#c99a1c" },
-      ],
+    { // 3: כדור הארץ — רמת קשה (מתחלף 2)
+      mode: "circle", skyTop: "#040a1c", skyBottom: "#01030a",
+      x: 440, y: 170, r: 100, file: "space/3_earth.jpg", img: new Image(),
     },
-    { // 4: שבתאי זהוב — רמת קשה (מתחלף 3)
-      skyTop: "#170f02", skyBottom: "#4a2f05",
-      planets: [
-        { x: 300, y: 150, r: 80, light: "#ffe9a8", dark: "#9c6a12", ring: true, ringColor: "#ffdd88" },
-      ],
+    { // 4: שבתאי עם הטבעות — רמת קשה (מתחלף 3). מלבני כדי לא לקטוע את הטבעות
+      mode: "rect", skyTop: "#171006", skyBottom: "#060402",
+      x: 300, y: 190, r: 110, file: "space/4_saturn.jpg", img: new Image(),
     },
     { // 5: מאדים האדום — רמת קשה (מתחלף 4)
-      skyTop: "#1a0402", skyBottom: "#4a0f08",
-      planets: [
-        { x: 430, y: 120, r: 60, light: "#ff9d73", dark: "#7a1d0a" },
-        { x: 130, y: 400, r: 35, light: "#d7d7d7", dark: "#6b6b6b" },
-      ],
+      mode: "circle", skyTop: "#1a0805", skyBottom: "#070301",
+      x: 160, y: 160, r: 95, file: "space/5_mars.jpg", img: new Image(),
     },
   ];
+  SPACE_THEMES.forEach((t) => { t.img.src = t.file; });   // מתחילים לטעון את כל התמונות כבר עכשיו
+
+  // --- "מכסה" תמונה על תוך מלבן יעד, בלי לעוות אותה (כמו CSS background-size: cover) ---
+  function drawImageCover(bctx, img, dx, dy, dw, dh) {
+    const destRatio = dw / dh;
+    const srcRatio = img.width / img.height;
+    let sx, sy, sw, sh;
+    if (srcRatio > destRatio) {
+      sh = img.height;
+      sw = sh * destRatio;
+      sx = (img.width - sw) / 2;
+      sy = 0;
+    } else {
+      sw = img.width;
+      sh = sw / destRatio;
+      sx = 0;
+      sy = (img.height - sh) / 2;
+    }
+    bctx.drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh);
+  }
 
   // --- מצייר ערכת נושא חלל אחת על "קנבס נסתר" (נעשה פעם אחת בלבד ונשמר) ---
   function generateSpaceBackground(theme) {
@@ -246,48 +249,60 @@
     bg.height = canvas.height;
     const bctx = bg.getContext("2d");
 
-    // שמיים כהים עם מעבר צבעים
-    const sky = bctx.createLinearGradient(0, 0, 0, bg.height);
-    sky.addColorStop(0, theme.skyTop);
-    sky.addColorStop(1, theme.skyBottom);
-    bctx.fillStyle = sky;
-    bctx.fillRect(0, 0, bg.width, bg.height);
+    // עבור תמונות "כוכב לכת" מציירים קודם שמיים כהים + כוכבים מפוזרים ברקע.
+    // תמונת הערפילית (mode: field) כבר מלאה בכוכבים בעצמה — לא צריך תוספת.
+    if (theme.mode !== "field") {
+      const sky = bctx.createLinearGradient(0, 0, 0, bg.height);
+      sky.addColorStop(0, theme.skyTop);
+      sky.addColorStop(1, theme.skyBottom);
+      bctx.fillStyle = sky;
+      bctx.fillRect(0, 0, bg.width, bg.height);
 
-    // כוכבים קטנים מפוזרים ברקע הרחוק
-    for (let i = 0; i < 90; i++) {
-      const sx = Math.random() * bg.width;
-      const sy = Math.random() * bg.height;
-      bctx.globalAlpha = Math.random() * 0.6 + 0.3;
-      bctx.fillStyle = "#ffffff";
-      bctx.beginPath();
-      bctx.arc(sx, sy, Math.random() * 1.4 + 0.3, 0, Math.PI * 2);
-      bctx.fill();
-    }
-    bctx.globalAlpha = 1;
-
-    // כוכבי הלכת של ערכת הנושא
-    theme.planets.forEach((p) => {
-      const grad = bctx.createRadialGradient(
-        p.x - p.r * 0.35, p.y - p.r * 0.35, p.r * 0.1,
-        p.x, p.y, p.r
-      );
-      grad.addColorStop(0, p.light);
-      grad.addColorStop(1, p.dark);
-      bctx.fillStyle = grad;
-      bctx.beginPath();
-      bctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-      bctx.fill();
-
-      if (p.ring) {   // טבעת אופציונלית (כמו שבתאי)
-        bctx.strokeStyle = p.ringColor;
-        bctx.lineWidth = p.r * 0.12;
-        bctx.globalAlpha = 0.7;
+      for (let i = 0; i < 90; i++) {
+        const sx = Math.random() * bg.width;
+        const sy = Math.random() * bg.height;
+        bctx.globalAlpha = Math.random() * 0.6 + 0.3;
+        bctx.fillStyle = "#ffffff";
         bctx.beginPath();
-        bctx.ellipse(p.x, p.y, p.r * 1.6, p.r * 0.4, -0.3, 0, Math.PI * 2);
-        bctx.stroke();
-        bctx.globalAlpha = 1;
+        bctx.arc(sx, sy, Math.random() * 1.4 + 0.3, 0, Math.PI * 2);
+        bctx.fill();
       }
-    });
+      bctx.globalAlpha = 1;
+    }
+
+    // מציירים את התמונה האמיתית עצמה (ברגע שהיא נטענת — אם עדיין לא נטענה, נצייר כשתסתיים)
+    function paintPhoto() {
+      if (theme.mode === "field") {
+        drawImageCover(bctx, theme.img, 0, 0, bg.width, bg.height);
+      } else if (theme.mode === "rect") {
+        // מלבן רחב יותר מגובה — כדי שהטבעות של שבתאי לא ייחתכו
+        const w = theme.r * 2.6, h = theme.r * 2.1;
+        drawImageCover(bctx, theme.img, theme.x - w / 2, theme.y - h / 2, w, h);
+      } else {
+        // כוכב לכת עגול: חותכים לעיגול ומוסיפים צל עדין לתחושת עומק
+        bctx.save();
+        bctx.beginPath();
+        bctx.arc(theme.x, theme.y, theme.r, 0, Math.PI * 2);
+        bctx.clip();
+        const size = theme.r * 2;
+        drawImageCover(bctx, theme.img, theme.x - size / 2, theme.y - size / 2, size, size);
+        bctx.restore();
+
+        const shade = bctx.createRadialGradient(
+          theme.x - theme.r * 0.3, theme.y - theme.r * 0.3, theme.r * 0.2,
+          theme.x, theme.y, theme.r
+        );
+        shade.addColorStop(0, "rgba(0,0,0,0)");
+        shade.addColorStop(1, "rgba(0,0,0,0.35)");
+        bctx.beginPath();
+        bctx.arc(theme.x, theme.y, theme.r, 0, Math.PI * 2);
+        bctx.fillStyle = shade;
+        bctx.fill();
+      }
+    }
+
+    if (theme.img.complete) paintPhoto();      // התמונה כבר בזיכרון (למשל טעונה מראש)
+    else theme.img.onload = paintPhoto;        // אחרת מציירים אותה ברגע שהיא תיטען
 
     return bg;
   }
