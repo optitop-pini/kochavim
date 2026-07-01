@@ -103,6 +103,10 @@
     <div id="screenButtons"></div>
   </div>
 
+  <!-- ספריית Firebase לטבלת שיאים מקוונת (משותפת לכל השחקנים) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
   <script>
   // =========================================================
   //  אזור ההגדרות — כאן הכי כיף לשנות! ⚙️
@@ -188,6 +192,46 @@
     localStorage.removeItem("starsLeaderboard");
     localStorage.removeItem("starsHighScore");
     localStorage.setItem("starsSaveVersion", SAVE_VERSION);
+  }
+
+  // =========================================================
+  //  🌐 טבלת שיאים מקוונת (Firebase) — משותפת לכל השחקנים
+  //  להחליף את הערכים למטה בפרטי הפרויקט שלכם מ-Firebase Console
+  //  (Project settings → Your apps → פרטי ה-Web app)
+  // =========================================================
+  const firebaseConfig = {
+    apiKey: "REPLACE_ME",
+    authDomain: "REPLACE_ME",
+    projectId: "REPLACE_ME",
+    storageBucket: "REPLACE_ME",
+    messagingSenderId: "REPLACE_ME",
+    appId: "REPLACE_ME",
+  };
+
+  let firebaseReady = false;
+  let db = null;
+  try {
+    if (firebaseConfig.apiKey !== "REPLACE_ME") {
+      firebase.initializeApp(firebaseConfig);
+      db = firebase.firestore();
+      firebaseReady = true;
+    }
+  } catch (e) {
+    firebaseReady = false;   // אם ההגדרה שגויה או שאין רשת — פשוט ממשיכים בלי הטבלה המקוונת
+  }
+
+  // שולחים ניקוד לטבלה המקוונת (לא קורס אם אין רשת/הגדרה — פשוט מתעלמים)
+  function saveScoreOnline(name, score) {
+    if (!firebaseReady) return;
+    db.collection("scores").add({ name: name, score: score, ts: Date.now() }).catch(() => {});
+  }
+
+  // מביא את 3 הניקודים הגבוהים ביותר מכל השחקנים (מחזיר Promise)
+  function fetchTopScoresOnline() {
+    if (!firebaseReady) return Promise.resolve(null);   // null = "אין חיבור, השתמשו בנתונים המקומיים"
+    return db.collection("scores").orderBy("score", "desc").limit(3).get()
+      .then((snapshot) => snapshot.docs.map((doc) => doc.data()))
+      .catch(() => null);
   }
 
   // טוענים את השיא מהזיכרון של הדפדפן (אם אין עדיין — מתחילים מ-0).
@@ -410,10 +454,9 @@
     return div.innerHTML;
   }
 
-  // --- בונה HTML של טבלת שלושת השחקנים המובילים (אם יש) ---
-  function renderLeaderboard() {
-    const board = JSON.parse(localStorage.getItem("starsLeaderboard") || "[]");
-    if (board.length === 0) return "";
+  // --- בונה HTML של טבלת שלושת המובילים מתוך רשימת {name, score} ---
+  function buildLeaderboardHtml(board) {
+    if (!board || board.length === 0) return "";
     const medals = ["🥇", "🥈", "🥉"];
     let html = '<div id="leaderboardBox"><div class="lbTitle">🏆 שלושת הראשונים</div>';
     board.forEach((entry, i) => {
@@ -423,13 +466,30 @@
     return html;
   }
 
-  // --- שומר ניקוד סופי בטבלת השיאים, ומשאיר רק את 3 המובילים ---
+  // --- טבלה מקומית (מהמכשיר הזה) — מוצגת מיד, לפני שהנתונים המקוונים מגיעים ---
+  function renderLeaderboard() {
+    const board = JSON.parse(localStorage.getItem("starsLeaderboard") || "[]");
+    return buildLeaderboardHtml(board);
+  }
+
+  // --- מחליף את הטבלה המקומית בטבלה המקוונת (משותפת לכל השחקנים), ברגע שהיא מגיעה ---
+  function refreshOnlineLeaderboard() {
+    fetchTopScoresOnline().then((board) => {
+      if (!board) return;   // אין רשת/הגדרה — משאירים את הטבלה המקומית כפי שהיא
+      const slot = document.getElementById("leaderboardSlot");
+      if (slot) slot.innerHTML = buildLeaderboardHtml(board);
+    });
+  }
+
+  // --- שומר ניקוד סופי: גיבוי מקומי (עובד תמיד) + שליחה לטבלה המקוונת (אם מחוברים) ---
   function saveScoreToLeaderboard(name, finalScore) {
     const board = JSON.parse(localStorage.getItem("starsLeaderboard") || "[]");
     board.push({ name: name, score: finalScore });
     board.sort((a, b) => b.score - a.score);   // מהניקוד הגבוה לנמוך
     board.length = Math.min(board.length, 3);  // רק 3 המקומות הראשונים
     localStorage.setItem("starsLeaderboard", JSON.stringify(board));
+
+    saveScoreOnline(name, finalScore);   // שולחים גם לטבלה המשותפת לכל השחקנים
   }
 
   // --- מסך הפתיחה: שם שחקן + טבלת שיאים + כפתור התחלה ---
@@ -442,8 +502,9 @@
       "⭐ כוכבים נופלים ⭐<br>אספו 20 כוכבים כדי לעבור שלב!<br>היזהרו מהמוקשים 💣" +
       '<div class="nameRow">השם שלי: <input id="playerNameInput" type="text" maxlength="12" placeholder="הקלידו שם"></div>' +
       '<div class="nameError" id="nameError"></div>' +
-      renderLeaderboard();
+      '<div id="leaderboardSlot">' + renderLeaderboard() + '</div>';
     document.getElementById("playerNameInput").value = savedName;
+    refreshOnlineLeaderboard();   // מחליפים בטבלה המקוונת (משותפת לכולם) ברגע שהיא מגיעה
 
     screenButtons.innerHTML = "";
     const btn = document.createElement("button");
@@ -527,9 +588,10 @@
       showScreen(
         "🏆 ניצחת! 🏆<br>עברת את כל הרמות — אלוף הכוכבים! ⭐" +
         "<br>" + playerName + ", סה\"כ אספת " + totalScore + " כוכבים" +
-        renderLeaderboard(),
+        '<div id="leaderboardSlot">' + renderLeaderboard() + '</div>',
         [ { label: "שחק מחדש 🔄", action: startNewRun } ]
       );
+      refreshOnlineLeaderboard();
     }
   }
 
@@ -812,9 +874,10 @@
     showScreen(
       "המשחק נגמר 🌟<br>הגעת לרמה " + DIFFICULTIES[currentLevel].name +
       "<br>" + playerName + ", סה\"כ אספת " + totalScore + " כוכבים" +
-      renderLeaderboard(),
+      '<div id="leaderboardSlot">' + renderLeaderboard() + '</div>',
       [ { label: "נסה שוב מההתחלה 🔄", action: startNewRun } ]
     );
+    refreshOnlineLeaderboard();
   }
 
   // ====== שליטה במקלדת ======
