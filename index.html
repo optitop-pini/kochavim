@@ -434,7 +434,10 @@
 
   // --- מסך הפתיחה: שם שחקן + טבלת שיאים + כפתור התחלה ---
   function showStartScreen() {
-    const savedName = localStorage.getItem("starsPlayerName") || "";
+    // "שחקן אלמוני" הוא שם ברירת מחדל ישן מגרסה קודמת (לפני ששם היה חובה) —
+    // אם זה מה שנשמר, מתייחסים אליו כאילו לא נשמר שם, כדי שהשדה יתחיל ריק
+    let savedName = localStorage.getItem("starsPlayerName") || "";
+    if (savedName === "שחקן אלמוני") savedName = "";
     screenMessage.innerHTML =
       "⭐ כוכבים נופלים ⭐<br>אספו 20 כוכבים כדי לעבור שלב!<br>היזהרו מהמוקשים 💣" +
       '<div class="nameRow">השם שלי: <input id="playerNameInput" type="text" maxlength="12" placeholder="הקלידו שם"></div>' +
