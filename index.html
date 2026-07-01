@@ -71,13 +71,28 @@
       cursor: pointer;
     }
     .diffBtn:hover { background: #ffd277; }
+    .nameRow { margin: 12px 0 4px; font-size: 16px; }
+    .nameRow input {
+      margin-inline-start: 6px;
+      padding: 6px 10px;
+      border-radius: 8px;
+      border: 1px solid #42bbc8;
+      font-size: 16px;
+      width: 140px;
+      text-align: center;
+      background: #0b1026;
+      color: white;
+    }
+    #leaderboardBox { margin-top: 14px; font-size: 16px; }
+    .lbTitle { font-weight: bold; margin-bottom: 6px; color: #fbbc46; }
+    .lbRow { margin: 2px 0; }
   </style>
 </head>
 <body>
 
   <h1>⭐ כוכבים נופלים ⭐</h1>
   <p id="lhuh">הזיזו את הסלסלה עם החיצים ← → ותפסו כוכבים!</p>
-  <div id="scoreboard">רמה: <span id="level">קל 🟢</span> &nbsp;|&nbsp; ניקוד: <span id="score">0</span> / <span id="target">40</span> &nbsp;|&nbsp; חיים: <span id="lives">❤️❤️❤️❤️❤️</span> &nbsp;|&nbsp; 🏆 שיא: <span id="highScore">0</span></div>
+  <div id="scoreboard">רמה: <span id="level">קל 🟢</span> &nbsp;|&nbsp; ניקוד: <span id="score">0</span> / <span id="target">20</span> &nbsp;|&nbsp; חיים: <span id="lives">❤️❤️❤️❤️❤️</span> &nbsp;|&nbsp; סה"כ: <span id="totalScoreDisplay">0</span> &nbsp;|&nbsp; 🏆 שיא: <span id="highScore">0</span></div>
 
   <canvas id="game" width="600" height="500"></canvas>
 
@@ -95,7 +110,7 @@
   const DIFFICULTIES = {
     easy: {                 // קל 🟢
       name: "קל 🟢",
-      target: 40,           // כמה כוכבים צריך לאסוף כדי לעבור לרמה הבאה
+      target: 20,           // כמה כוכבים צריך לאסוף כדי לעבור לרמה הבאה
       next: "medium",       // הרמה הבאה אחרי שמסיימים
       lives: 5,             // כמה לבבות מתחילים איתם
       basketWidth: 120,     // רוחב הסלסלה (גדול = קל יותר לתפוס)
@@ -106,7 +121,7 @@
     },
     medium: {               // בינוני 🟡
       name: "בינוני 🟡",
-      target: 30,
+      target: 15,
       next: "hard",
       lives: 4,
       basketWidth: 90,
@@ -117,8 +132,8 @@
     },
     hard: {                 // קשה 🔴
       name: "קשה 🔴",
-      target: 15,
-      next: null,           // אין רמה הבאה — מי שמסיים את "קשה" מנצח!
+      target: Infinity,     // אין יעד — הרמה אינסופית! ממשיכים עד שנגמרים הלבבות
+      next: null,           // אין רמה הבאה — משחקים "קשה" עד הסוף
       lives: 3,
       basketWidth: 65,
       starSpeed: 4.5,
@@ -153,17 +168,138 @@
   const levelEl = document.getElementById("level");
   const livesEl = document.getElementById("lives");
   const highScoreEl = document.getElementById("highScore");
+  const totalScoreEl = document.getElementById("totalScoreDisplay");
   const startScreen = document.getElementById("startScreen");
   const screenMessage = document.getElementById("screenMessage");
   const screenButtons = document.getElementById("screenButtons");
 
-  let basketX, score, lives, stars, mines, frameCount, isPlaying;
+  let basketX, score, lives, stars, mines, particles, frameCount, isPlaying;
   let currentLevel = "easy";   // הרמה שבה משחקים כרגע (תמיד מתחילים מ"קל")
+  let playerName = "שחקן אלמוני";   // שם השחקן הנוכחי
+  let totalScore = 0;               // סך כל הכוכבים שנאספו בריצה הנוכחית (לכל השלבים ביחד)
   let moveLeft = false, moveRight = false;
+
+  // איפוס טבלת השיאים לכל השחקנים — עולה פעם אחת עם כל גרסה חדשה של המשחק.
+  // מי שכבר שיחק בגרסה ישנה יתחיל מחדש מ-0 ברגע שהוא פותח את הגרסה הזו.
+  const SAVE_VERSION = "2";
+  if (localStorage.getItem("starsSaveVersion") !== SAVE_VERSION) {
+    localStorage.removeItem("starsLeaderboard");
+    localStorage.removeItem("starsHighScore");
+    localStorage.setItem("starsSaveVersion", SAVE_VERSION);
+  }
 
   // טוענים את השיא מהזיכרון של הדפדפן (אם אין עדיין — מתחילים מ-0).
   // localStorage שומר את המספר גם אחרי שסוגרים את הדף או מכבים את המחשב.
   let highScore = Number(localStorage.getItem("starsHighScore")) || 0;
+
+  // =========================================================
+  //  רקעי חלל 🌌 — כוכבי לכת מצוירים בקוד (בלי קבצי תמונה חיצוניים)
+  //  אינדקסים 0-1 = קל/בינוני, אינדקסים 2-5 = מתחלפים ברמת קשה
+  // =========================================================
+  const SPACE_THEMES = [
+    { // 0: ערפילית סגולה — רמת קל
+      skyTop: "#1a0933", skyBottom: "#3b1266",
+      planets: [
+        { x: 480, y: 100, r: 70, light: "#c9a6ff", dark: "#5b2a91" },
+        { x: 100, y: 380, r: 40, light: "#8fd9ff", dark: "#1c5c86" },
+      ],
+    },
+    { // 1: ירח כתום — רמת בינוני
+      skyTop: "#1b0f08", skyBottom: "#4a1f0a",
+      planets: [
+        { x: 150, y: 110, r: 85, light: "#ffcf8a", dark: "#a4460c" },
+        { x: 470, y: 400, r: 30, light: "#e8e8e8", dark: "#7d7d7d" },
+      ],
+    },
+    { // 2: כוכב קרח — רמת קשה (מתחלף 1)
+      skyTop: "#031627", skyBottom: "#0c3a52",
+      planets: [
+        { x: 460, y: 130, r: 75, light: "#bdfbff", dark: "#1b7fa1", ring: true, ringColor: "#eaffff" },
+      ],
+    },
+    { // 3: עולם ירוק זר — רמת קשה (מתחלף 2)
+      skyTop: "#02150c", skyBottom: "#0a3d22",
+      planets: [
+        { x: 120, y: 130, r: 65, light: "#baffb0", dark: "#1c7a3e" },
+        { x: 480, y: 370, r: 45, light: "#fff4a3", dark: "#c99a1c" },
+      ],
+    },
+    { // 4: שבתאי זהוב — רמת קשה (מתחלף 3)
+      skyTop: "#170f02", skyBottom: "#4a2f05",
+      planets: [
+        { x: 300, y: 150, r: 80, light: "#ffe9a8", dark: "#9c6a12", ring: true, ringColor: "#ffdd88" },
+      ],
+    },
+    { // 5: מאדים האדום — רמת קשה (מתחלף 4)
+      skyTop: "#1a0402", skyBottom: "#4a0f08",
+      planets: [
+        { x: 430, y: 120, r: 60, light: "#ff9d73", dark: "#7a1d0a" },
+        { x: 130, y: 400, r: 35, light: "#d7d7d7", dark: "#6b6b6b" },
+      ],
+    },
+  ];
+
+  // --- מצייר ערכת נושא חלל אחת על "קנבס נסתר" (נעשה פעם אחת בלבד ונשמר) ---
+  function generateSpaceBackground(theme) {
+    const bg = document.createElement("canvas");
+    bg.width = canvas.width;
+    bg.height = canvas.height;
+    const bctx = bg.getContext("2d");
+
+    // שמיים כהים עם מעבר צבעים
+    const sky = bctx.createLinearGradient(0, 0, 0, bg.height);
+    sky.addColorStop(0, theme.skyTop);
+    sky.addColorStop(1, theme.skyBottom);
+    bctx.fillStyle = sky;
+    bctx.fillRect(0, 0, bg.width, bg.height);
+
+    // כוכבים קטנים מפוזרים ברקע הרחוק
+    for (let i = 0; i < 90; i++) {
+      const sx = Math.random() * bg.width;
+      const sy = Math.random() * bg.height;
+      bctx.globalAlpha = Math.random() * 0.6 + 0.3;
+      bctx.fillStyle = "#ffffff";
+      bctx.beginPath();
+      bctx.arc(sx, sy, Math.random() * 1.4 + 0.3, 0, Math.PI * 2);
+      bctx.fill();
+    }
+    bctx.globalAlpha = 1;
+
+    // כוכבי הלכת של ערכת הנושא
+    theme.planets.forEach((p) => {
+      const grad = bctx.createRadialGradient(
+        p.x - p.r * 0.35, p.y - p.r * 0.35, p.r * 0.1,
+        p.x, p.y, p.r
+      );
+      grad.addColorStop(0, p.light);
+      grad.addColorStop(1, p.dark);
+      bctx.fillStyle = grad;
+      bctx.beginPath();
+      bctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      bctx.fill();
+
+      if (p.ring) {   // טבעת אופציונלית (כמו שבתאי)
+        bctx.strokeStyle = p.ringColor;
+        bctx.lineWidth = p.r * 0.12;
+        bctx.globalAlpha = 0.7;
+        bctx.beginPath();
+        bctx.ellipse(p.x, p.y, p.r * 1.6, p.r * 0.4, -0.3, 0, Math.PI * 2);
+        bctx.stroke();
+        bctx.globalAlpha = 1;
+      }
+    });
+
+    return bg;
+  }
+
+  const bgCache = {};   // כדי לא לצייר את אותה ערכת נושא כמה פעמים
+  function getSpaceBackground(themeIndex) {
+    if (!bgCache[themeIndex]) bgCache[themeIndex] = generateSpaceBackground(SPACE_THEMES[themeIndex]);
+    return bgCache[themeIndex];
+  }
+
+  let currentBg = null;    // הרקע המצויר כרגע
+  let hardBgIndex = 2;     // איזו ערכת נושא פעילה ברמת קשה (מתחיל מ-2, מסתובב עד 5)
 
   // =========================================================
   //  מנוע הצלילים 🔊
@@ -213,6 +349,17 @@
     ]);
   }
 
+  // צליל זיקוקים 🎆 — פרץ מהיר של "פצפוצים" גבוהים ואקראיים (מוקש+כוכב מתנגשים)
+  function playFireworkSound() {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    let t = audioCtx.currentTime;
+    for (let i = 0; i < 6; i++) {
+      const freq = 700 + Math.random() * 1300;   // תדר אקראי גבוה = "פצפוץ"
+      playTone(freq, t, 0.06);
+      t += 0.02;                                  // כל פצפוץ מתחיל רגע אחרי הקודם
+    }
+  }
+
   // צליל פאנפרה 🎺 — מנגינה עולה וחגיגית (מעבר שלב / ניצחון)
   function playFanfareSound() {
     playMelody([
@@ -239,16 +386,60 @@
     startScreen.style.display = "block";
   }
 
-  // --- מסך הפתיחה ---
+  // --- ממיר טקסט חופשי (שם שחקן) ל-HTML בטוח, כדי שלא יהיה אפשר "להזריק" קוד ---
+  function escapeHtml(str) {
+    const div = document.createElement("div");
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  // --- בונה HTML של טבלת שלושת השחקנים המובילים (אם יש) ---
+  function renderLeaderboard() {
+    const board = JSON.parse(localStorage.getItem("starsLeaderboard") || "[]");
+    if (board.length === 0) return "";
+    const medals = ["🥇", "🥈", "🥉"];
+    let html = '<div id="leaderboardBox"><div class="lbTitle">🏆 שלושת הראשונים</div>';
+    board.forEach((entry, i) => {
+      html += '<div class="lbRow">' + medals[i] + " " + escapeHtml(entry.name) + " — " + entry.score + " כוכבים</div>";
+    });
+    html += "</div>";
+    return html;
+  }
+
+  // --- שומר ניקוד סופי בטבלת השיאים, ומשאיר רק את 3 המובילים ---
+  function saveScoreToLeaderboard(name, finalScore) {
+    const board = JSON.parse(localStorage.getItem("starsLeaderboard") || "[]");
+    board.push({ name: name, score: finalScore });
+    board.sort((a, b) => b.score - a.score);   // מהניקוד הגבוה לנמוך
+    board.length = Math.min(board.length, 3);  // רק 3 המקומות הראשונים
+    localStorage.setItem("starsLeaderboard", JSON.stringify(board));
+  }
+
+  // --- מסך הפתיחה: שם שחקן + טבלת שיאים + כפתור התחלה ---
   function showStartScreen() {
-    showScreen(
-      "⭐ כוכבים נופלים ⭐<br>אספו 40 כוכבים כדי לעבור שלב!<br>היזהרו מהמוקשים 💣",
-      [ { label: "התחל משחק 🎮", action: startNewRun } ]
-    );
+    const savedName = localStorage.getItem("starsPlayerName") || "";
+    screenMessage.innerHTML =
+      "⭐ כוכבים נופלים ⭐<br>אספו 20 כוכבים כדי לעבור שלב!<br>היזהרו מהמוקשים 💣" +
+      '<div class="nameRow">השם שלי: <input id="playerNameInput" type="text" maxlength="12" placeholder="הקלידו שם"></div>' +
+      renderLeaderboard();
+    document.getElementById("playerNameInput").value = savedName;
+
+    screenButtons.innerHTML = "";
+    const btn = document.createElement("button");
+    btn.className = "diffBtn";
+    btn.textContent = "התחל משחק 🎮";
+    btn.onclick = startNewRun;
+    screenButtons.appendChild(btn);
+
+    startScreen.style.display = "block";
   }
 
   // --- מתחילים ריצה חדשה מההתחלה (תמיד רמת "קל") ---
   function startNewRun() {
+    const input = document.getElementById("playerNameInput");
+    playerName = (input && input.value.trim()) || "שחקן אלמוני";
+    localStorage.setItem("starsPlayerName", playerName);   // זוכרים את השם לפעם הבאה
+    totalScore = 0;                                        // מאפסים את סך הניקוד לריצה חדשה
     startLevel("easy");
   }
 
@@ -268,9 +459,16 @@
     lives = STARTING_LIVES;
     stars = [];
     mines = [];
+    particles = [];
     frameCount = 0;
     isPlaying = true;
     startScreen.style.display = "none";
+
+    // בוחרים את רקע החלל של השלב: קל=0, בינוני=1, קשה=מתחיל מ-2 ומתחלף כל 15 כוכבים
+    if (level === "easy")   currentBg = getSpaceBackground(0);
+    if (level === "medium") currentBg = getSpaceBackground(1);
+    if (level === "hard")   { hardBgIndex = 2; currentBg = getSpaceBackground(hardBgIndex); }
+
     updateScoreboard();
     loop();
   }
@@ -282,15 +480,21 @@
     const next = DIFFICULTIES[currentLevel].next;
     if (next) {
       // יש רמה הבאה — מציגים מסך מעבר שלב
+      // אם הרמה הבאה אינסופית (אין לה יעד) — מוסיפים הסבר לשחקן
+      const nextIsEndless = !isFinite(DIFFICULTIES[next].target);
       showScreen(
         "כל הכבוד! 🎉 סיימת את הרמה " + DIFFICULTIES[currentLevel].name +
-        "<br>הרמה הבאה: " + DIFFICULTIES[next].name,
+        "<br>הרמה הבאה: " + DIFFICULTIES[next].name +
+        (nextIsEndless ? "<br>רמה זו אינסופית ⭐ תפסו הכי הרבה כוכבים שאפשר!" : ""),
         [ { label: "המשך ➡️", action: () => startLevel(next) } ]
       );
     } else {
-      // אין רמה הבאה — ניצחון מוחלט!
+      // אין רמה הבאה — ניצחון מוחלט! שומרים את הניקוד בטבלת השיאים
+      saveScoreToLeaderboard(playerName, totalScore);
       showScreen(
-        "🏆 ניצחת! 🏆<br>עברת את כל הרמות — אלוף הכוכבים! ⭐",
+        "🏆 ניצחת! 🏆<br>עברת את כל הרמות — אלוף הכוכבים! ⭐" +
+        "<br>" + playerName + ", סה\"כ אספת " + totalScore + " כוכבים" +
+        renderLeaderboard(),
         [ { label: "שחק מחדש 🔄", action: startNewRun } ]
       );
     }
@@ -370,6 +574,42 @@
     ctx.restore();
   }
 
+  // --- יוצר פיצוץ זיקוקים 🎆 במקום מסוים (כשכוכב ומוקש מתנגשים) ---
+  function spawnFirework(x, y) {
+    const colors = ["#ff5e5e", "#fbbc46", "#42bbc8", "#a86cff", "#5eff8f", "#ffffff"];
+    for (let i = 0; i < 24; i++) {
+      // כל ניצוץ יורה בזווית קצת אחרת סביב מעגל שלם — ככה נוצרת צורת "פיצוץ"
+      const angle = (Math.PI * 2 * i) / 24 + Math.random() * 0.3;
+      const speed = 2 + Math.random() * 3;
+      particles.push({
+        x: x, y: y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        color: colors[Math.floor(Math.random() * colors.length)],
+        life: 1,        // 1 = ניצוץ מלא. יורד בהדרגה עד 0 ואז נעלם.
+      });
+    }
+  }
+
+  // --- מזיז ומצייר את כל ניצוצות הזיקוקים הפעילים ---
+  function updateAndDrawParticles() {
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const p = particles[i];
+      p.x += p.vx;
+      p.y += p.vy;
+      p.vy += 0.08;      // כוח משיכה קל — הניצוצות שוקעות למטה
+      p.life -= 0.03;    // דהייה הדרגתית
+      if (p.life <= 0) { particles.splice(i, 1); continue; }
+
+      ctx.globalAlpha = p.life;   // ככל שהחיים נגמרים — הניצוץ נעשה שקוף יותר
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+  }
+
   // --- מצייר את הסלסלה ---
   function drawBasket() {
     const y = canvas.height - 30;
@@ -390,9 +630,13 @@
   // --- מעדכן את לוח הניקוד למעלה ---
   function updateScoreboard() {
     scoreEl.textContent = score;
-    targetEl.textContent = DIFFICULTIES[currentLevel].target;   // היעד של הרמה
+    // אם אין יעד (רמה אינסופית) — מציגים סימן אינסוף ∞ במקום מספר
+    targetEl.textContent = isFinite(DIFFICULTIES[currentLevel].target)
+      ? DIFFICULTIES[currentLevel].target
+      : "∞";
     levelEl.textContent = DIFFICULTIES[currentLevel].name;      // שם הרמה
     livesEl.textContent = "❤️".repeat(lives) || "💔";
+    totalScoreEl.textContent = totalScore;                      // סך הכוכבים בריצה הנוכחית
 
     // אם הניקוד הנוכחי עבר את השיא — מעדכנים ושומרים בזיכרון
     if (score > highScore) {
@@ -407,8 +651,9 @@
     if (!isPlaying) return;
     frameCount++;
 
-    // מנקים את המסך
+    // מנקים את המסך ומציירים את רקע החלל (כוכבי הלכת) של השלב הנוכחי
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (currentBg) ctx.drawImage(currentBg, 0, 0);
 
     // יוצרים כוכב חדש מדי פעם, במיקום אקראי
     if (frameCount % STAR_SPAWN_RATE === 0) {
@@ -443,9 +688,18 @@
                      star.x < basketX + BASKET_WIDTH;
       if (caught) {
         score++;
+        totalScore++;          // סופרים גם לסך הכל של כל הריצה (לטבלת השיאים)
         stars.splice(i, 1);   // מוחקים את הכוכב שנתפס
         updateScoreboard();
         playWinSound();        // 🎉 צליל ניצחון!
+
+        // ברמת קשה: כל 15 כוכבים מחליפים לכוכב לכת אחר ברקע 🌌
+        if (currentLevel === "hard" && score % 15 === 0) {
+          const hardThemeCount = SPACE_THEMES.length - 2;   // כמה ערכות נושא שמורות לרמת קשה (2..5)
+          hardBgIndex = 2 + ((hardBgIndex - 2 + 1) % hardThemeCount);
+          currentBg = getSpaceBackground(hardBgIndex);
+        }
+
         if (score >= DIFFICULTIES[currentLevel].target) {  // הגענו ליעד?
           advanceLevel();
           return;
@@ -493,6 +747,26 @@
       }
     }
 
+    // בודקים התנגשות בין מוקש לכוכב באוויר — שניהם מתפוצצים בזיקוקים! 🎆
+    for (let i = mines.length - 1; i >= 0; i--) {
+      const mine = mines[i];
+      for (let j = stars.length - 1; j >= 0; j--) {
+        const star = stars[j];
+        const dx = mine.x - star.x;
+        const dy = mine.y - star.y;
+        const touching = Math.sqrt(dx * dx + dy * dy) < MINE_SIZE + STAR_SIZE;
+        if (touching) {
+          spawnFirework((mine.x + star.x) / 2, (mine.y + star.y) / 2);
+          playFireworkSound();
+          mines.splice(i, 1);
+          stars.splice(j, 1);
+          break;   // המוקש הזה כבר התפוצץ — עוברים לבדוק את המוקש הבא
+        }
+      }
+    }
+
+    updateAndDrawParticles();   // מציירים את כל הזיקוקים הפעילים כרגע
+
     drawBasket();
     requestAnimationFrame(loop);   // מבקשים לצייר את הפריים הבא
   }
@@ -501,9 +775,11 @@
   function gameOver() {
     isPlaying = false;
     playLoseSound();           // 😢 צליל כישלון!
+    saveScoreToLeaderboard(playerName, totalScore);   // שומרים את הניקוד הסופי בטבלת השיאים
     showScreen(
       "המשחק נגמר 🌟<br>הגעת לרמה " + DIFFICULTIES[currentLevel].name +
-      " עם " + score + " כוכבים",
+      "<br>" + playerName + ", סה\"כ אספת " + totalScore + " כוכבים" +
+      renderLeaderboard(),
       [ { label: "נסה שוב מההתחלה 🔄", action: startNewRun } ]
     );
   }
