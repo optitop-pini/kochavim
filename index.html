@@ -537,6 +537,12 @@
     startLevel("easy");
   }
 
+  // --- "נסה שוב" ממסך סיום/ניצחון — אין שם להקליד שם, ממשיכים עם השם שכבר אושר ---
+  function restartRun() {
+    totalScore = 0;
+    startLevel("easy");
+  }
+
   // --- טוענים רמה מסוימת ומתחילים לשחק בה ---
   function startLevel(level) {
     currentLevel = level;
@@ -589,7 +595,7 @@
         "🏆 ניצחת! 🏆<br>עברת את כל הרמות — אלוף הכוכבים! ⭐" +
         "<br>" + playerName + ", סה\"כ אספת " + totalScore + " כוכבים" +
         '<div id="leaderboardSlot">' + renderLeaderboard() + '</div>',
-        [ { label: "שחק מחדש 🔄", action: startNewRun } ]
+        [ { label: "שחק מחדש 🔄", action: restartRun } ]
       );
       refreshOnlineLeaderboard();
     }
@@ -875,7 +881,7 @@
       "המשחק נגמר 🌟<br>הגעת לרמה " + DIFFICULTIES[currentLevel].name +
       "<br>" + playerName + ", סה\"כ אספת " + totalScore + " כוכבים" +
       '<div id="leaderboardSlot">' + renderLeaderboard() + '</div>',
-      [ { label: "נסה שוב מההתחלה 🔄", action: startNewRun } ]
+      [ { label: "נסה שוב מההתחלה 🔄", action: restartRun } ]
     );
     refreshOnlineLeaderboard();
   }
