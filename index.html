@@ -184,11 +184,16 @@
   const screenMessage = document.getElementById("screenMessage");
   const screenButtons = document.getElementById("screenButtons");
 
-  let basketX, score, lives, stars, mines, particles, frameCount, isPlaying;
+  let basketX, basketY, score, lives, stars, mines, particles, frameCount, isPlaying;
   let currentLevel = "easy";   // הרמה שבה משחקים כרגע (תמיד מתחילים מ"קל")
   let playerName = "שחקן אלמוני";   // שם השחקן הנוכחי
   let totalScore = 0;               // סך כל הכוכבים שנאספו בריצה הנוכחית (לכל השלבים ביחד)
-  let moveLeft = false, moveRight = false;
+  let moveLeft = false, moveRight = false, moveUp = false, moveDown = false;
+
+  // הסלסלה יכולה לעוף למעלה ולמטה בטווח מוגבל (רעיון של עומר) — לא עד קצה המסך ממש
+  const BASKET_HEIGHT = 28;              // עובי הסלסלה (לבדיקת תפיסה מדויקת)
+  const BASKET_MAX_Y  = canvas.height - 30;  // הכי נמוך שהסלסלה יכולה להיות (המקום המקורי, למטה)
+  const BASKET_MIN_Y  = 180;                 // הכי גבוה שהסלסלה יכולה לעוף
 
   // איפוס טבלת השיאים לכל השחקנים — עולה פעם אחת עם כל גרסה חדשה של המשחק.
   // מי שכבר שיחק בגרסה ישנה יתחיל מחדש מ-0 ברגע שהוא פותח את הגרסה הזו.
@@ -560,6 +565,7 @@
     MINE_SPAWN_RATE = d.mineRate;
 
     basketX = canvas.width / 2 - BASKET_WIDTH / 2;
+    basketY = BASKET_MAX_Y;   // מתחילים למטה, כרגיל
     score = 0;                 // הניקוד מתחיל מ-0 בכל רמה
     lives = STARTING_LIVES;
     stars = [];
@@ -731,7 +737,7 @@
 
   // --- מצייר את הסלסלה ---
   function drawBasket() {
-    const y = canvas.height - 30;
+    const y = basketY;   // המיקום האנכי האמיתי של הסלסלה (יכול לזוז למעלה/למטה)
     ctx.fillStyle = "#42bbc8";
     ctx.beginPath();
     ctx.moveTo(basketX, y);
@@ -789,22 +795,26 @@
       mines.push({ x: mx, y: -MINE_SIZE });
     }
 
-    // מזיזים את הסלסלה לפי המקלדת
+    // מזיזים את הסלסלה לפי המקלדת (שמאל-ימין, ועכשיו גם למעלה-למטה!)
     if (moveLeft)  basketX -= BASKET_SPEED;
     if (moveRight) basketX += BASKET_SPEED;
-    // לא נותנים לסלסלה לצאת מהמסך
+    if (moveUp)    basketY -= BASKET_SPEED;
+    if (moveDown)  basketY += BASKET_SPEED;
+    // לא נותנים לסלסלה לצאת מהמסך, ולא לעוף גבוה/נמוך מדי
     basketX = Math.max(0, Math.min(canvas.width - BASKET_WIDTH, basketX));
+    basketY = Math.max(BASKET_MIN_Y, Math.min(BASKET_MAX_Y, basketY));
 
     // מזיזים ומציירים כל כוכב
-    const basketY = canvas.height - 30;
     for (let i = stars.length - 1; i >= 0; i--) {
       const star = stars[i];
       star.y += STAR_FALL_SPEED;
       star.rot += star.spin;     // מסובבים את הכוכב מעט → תחושת תלת-ממד
       drawStar(star.x, star.y, star.size, star.rot, star.isSuper);
 
-      // האם הכוכב נתפס בסלסלה?
+      // האם הכוכב נתפס בסלסלה? (בודקים שהוא בתוך הרצועה שבה הסלסלה נמצאת עכשיו —
+      // חשוב עכשיו שהסלסלה יכולה לזוז למעלה/למטה, לא רק קו קבוע בתחתית)
       const caught = star.y + star.size > basketY &&
+                     star.y - star.size < basketY + BASKET_HEIGHT &&
                      star.x > basketX &&
                      star.x < basketX + BASKET_WIDTH;
       if (caught) {
@@ -847,8 +857,9 @@
       mine.y += MINE_FALL_SPEED;
       drawMine(mine.x, mine.y, MINE_SIZE);
 
-      // האם הסלסלה תפסה מוקש? אם כן — מאבדים לב אחד! 💥
+      // האם הסלסלה תפסה מוקש? אם כן — מאבדים לב אחד! 💥 (אותה בדיקת רצועה כמו בכוכבים)
       const hit = mine.y + MINE_SIZE > basketY &&
+                  mine.y - MINE_SIZE < basketY + BASKET_HEIGHT &&
                   mine.x > basketX &&
                   mine.x < basketX + BASKET_WIDTH;
       if (hit) {
@@ -914,21 +925,27 @@
   document.addEventListener("keydown", (e) => {
     if (e.key === "ArrowLeft")  moveLeft = true;
     if (e.key === "ArrowRight") moveRight = true;
+    if (e.key === "ArrowUp")    moveUp = true;
+    if (e.key === "ArrowDown")  moveDown = true;
   });
   document.addEventListener("keyup", (e) => {
     if (e.key === "ArrowLeft")  moveLeft = false;
     if (e.key === "ArrowRight") moveRight = false;
+    if (e.key === "ArrowUp")    moveUp = false;
+    if (e.key === "ArrowDown")  moveDown = false;
   });
 
-  // ====== שליטה בעכבר ובמגע (לנייד) ======
-  function moveBasketTo(clientX) {
+  // ====== שליטה בעכבר ובמגע (לנייד) — עכשיו גם למעלה/למטה ======
+  function moveBasketTo(clientX, clientY) {
     const rect = canvas.getBoundingClientRect();
-    const scale = canvas.width / rect.width;
-    basketX = (clientX - rect.left) * scale - BASKET_WIDTH / 2;
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    basketX = (clientX - rect.left) * scaleX - BASKET_WIDTH / 2;
+    basketY = (clientY - rect.top) * scaleY - BASKET_HEIGHT / 2;
   }
-  canvas.addEventListener("mousemove", (e) => moveBasketTo(e.clientX));
+  canvas.addEventListener("mousemove", (e) => moveBasketTo(e.clientX, e.clientY));
   canvas.addEventListener("touchmove", (e) => {
-    moveBasketTo(e.touches[0].clientX);
+    moveBasketTo(e.touches[0].clientX, e.touches[0].clientY);
     e.preventDefault();
   }, { passive: false });
 
