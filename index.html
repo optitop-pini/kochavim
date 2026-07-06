@@ -88,6 +88,41 @@
     #leaderboardBox { margin-top: 14px; font-size: 16px; }
     .lbTitle { font-weight: bold; margin-bottom: 6px; color: #fbbc46; }
     .lbRow { margin: 2px 0; }
+
+    /* ====== כתוביות "מלחמת הכוכבים" — מופיעות כל 100 נקודות (רעיון עומר) ======
+       זו שכבה שצפה מעל המשחק, ולא נוגעת בלוגיקה הפנימית שלו — לכן היא בטוחה
+       ולא יכולה "לשבור" שום דבר במשחק עצמו. */
+    #crawlOverlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.75);
+      display: none;
+      z-index: 100;
+      overflow: hidden;
+      perspective: 350px;
+      pointer-events: none;   /* אפשר להמשיך לשחק מתחת בזמן שהכתוביות רצות */
+    }
+    #crawlOverlay.active { display: block; }
+    #crawlText {
+      position: absolute;
+      left: 50%;
+      bottom: -10%;
+      width: 80%;
+      max-width: 480px;
+      transform: translateX(-50%) rotateX(55deg);
+      transform-origin: 50% 100%;
+      color: #fbbc46;
+      font-weight: bold;
+      font-size: clamp(20px, 6vw, 34px);
+      text-align: center;
+      line-height: 1.5;
+      text-shadow: 0 0 6px rgba(251,188,70,.6);
+      animation: crawlScroll 5s linear forwards;
+    }
+    @keyframes crawlScroll {
+      from { bottom: -10%;  opacity: 1; }
+      to   { bottom: 220%;  opacity: .1; }
+    }
   </style>
 </head>
 <body>
@@ -97,6 +132,11 @@
   <div id="scoreboard">רמה: <span id="level">קל 🟢</span> &nbsp;|&nbsp; ניקוד: <span id="score">0</span> / <span id="target">20</span> &nbsp;|&nbsp; חיים: <span id="lives">❤️❤️❤️❤️❤️</span> &nbsp;|&nbsp; סה"כ: <span id="totalScoreDisplay">0</span> &nbsp;|&nbsp; 🏆 שיא: <span id="highScore">0</span></div>
 
   <canvas id="game" width="600" height="500"></canvas>
+
+  <!-- כתוביות "מלחמת הכוכבים" — מוצג כל 100 נקודות, לא חוסם את המשחק -->
+  <div id="crawlOverlay">
+    <div id="crawlText"></div>
+  </div>
 
   <div id="startScreen">
     <div id="screenMessage"></div>
@@ -766,6 +806,26 @@
     ctx.stroke();
   }
 
+  // --- מציג כתוביות "מלחמת הכוכבים" חוגגות כל 100 נקודות (רעיון עומר) ---
+  // זו שכבה נפרדת שצפה מעל המשחק — לא עוצרת ולא נוגעת בלולאת המשחק עצמה
+  let crawlHideTimer = null;
+  function showCrawl(points) {
+    const overlay = document.getElementById("crawlOverlay");
+    const textEl = document.getElementById("crawlText");
+    textEl.innerHTML =
+      "אלוף הכוכבים ⭐<br><br>" +
+      playerName + " עבר כבר<br>" + points + "<br>נקודות!<br><br>המשך כך...";
+
+    // מאתחלים את האנימציה מחדש (חשוב אם זה כבר קרה קודם באותה ריצה)
+    textEl.style.animation = "none";
+    void textEl.offsetWidth;   // "טריק" שמאלץ את הדפדפן לאפס את האנימציה לפני שמפעילים אותה שוב
+    textEl.style.animation = "";
+
+    overlay.classList.add("active");
+    clearTimeout(crawlHideTimer);
+    crawlHideTimer = setTimeout(() => overlay.classList.remove("active"), 5000);
+  }
+
   // --- מעדכן את לוח הניקוד למעלה ---
   function updateScoreboard() {
     scoreEl.textContent = score;
@@ -833,8 +893,13 @@
                      star.x < basketX + BASKET_WIDTH;
       if (caught) {
         const gained = star.isSuper ? SUPER_STAR_VALUE : 1;   // כוכב-על שווה יותר נקודות ⭐✨
+        const hundredsBefore = Math.floor(totalScore / 100);   // כמה "מאות" עברנו לפני הכוכב הזה
         score += gained;
         totalScore += gained;   // סופרים גם לסך הכל של כל הריצה (לטבלת השיאים)
+        const hundredsAfter = Math.floor(totalScore / 100);
+        if (hundredsAfter > hundredsBefore) {
+          showCrawl(hundredsAfter * 100);   // עברנו רף חדש של 100 — כתוביות מלחמת הכוכבים! 🌌
+        }
         stars.splice(i, 1);   // מוחקים את הכוכב שנתפס
         updateScoreboard();
         playWinSound();        // 🎉 צליל ניצחון!
