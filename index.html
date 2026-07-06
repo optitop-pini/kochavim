@@ -95,14 +95,14 @@
     #crawlOverlay {
       position: fixed;
       inset: 0;
-      background: rgba(0,0,0,.75);
+      background: rgba(0,0,0,.5);   /* שקיפות 50% — לא מעמעם מדי את המשחק מתחת */
       display: none;
       z-index: 100;
       overflow: hidden;
       pointer-events: none;   /* אפשר להמשיך לשחק מתחת בזמן שהכתוביות רצות */
     }
     #crawlOverlay.active { display: block; }
-    /* הטקסט מתחיל רחוק וקטנטן במרכז המסך, ו"טס" לעבר השחקן — גדל בהדרגה ובאיטיות */
+    /* הטקסט יוצא מהשליש העליון של המסך, גדל וזז למרכז, נעצר שנייה, ונעלם */
     #crawlText {
       position: absolute;
       top: 50%;
@@ -115,13 +115,14 @@
       text-align: center;
       line-height: 1.5;
       text-shadow: 0 0 10px rgba(251,188,70,.8);
-      animation: crawlApproach 6s ease-in forwards;
+      animation: crawlApproach 4s ease-out forwards;
     }
     @keyframes crawlApproach {
-      0%   { transform: translate(-50%, -50%) scale(.05); opacity: 0; }
+      0%   { transform: translate(-50%, calc(-50% - 25vh)) scale(.1); opacity: 0; }  /* מתחיל בשליש העליון, קטנטן */
       15%  { opacity: 1; }
-      85%  { transform: translate(-50%, -50%) scale(4); opacity: 1; }
-      100% { transform: translate(-50%, -50%) scale(6); opacity: 0; }
+      55%  { transform: translate(-50%, -50%) scale(1); opacity: 1; }   /* מגיע למרכז, בגודל מלא */
+      80%  { transform: translate(-50%, -50%) scale(1); opacity: 1; }   /* נשאר במקום — "עוצר לשנייה" */
+      100% { transform: translate(-50%, -50%) scale(1); opacity: 0; }   /* נעלם */
     }
   </style>
 </head>
@@ -823,7 +824,7 @@
 
     overlay.classList.add("active");
     clearTimeout(crawlHideTimer);
-    crawlHideTimer = setTimeout(() => overlay.classList.remove("active"), 6000);
+    crawlHideTimer = setTimeout(() => overlay.classList.remove("active"), 4000);
   }
 
   // --- מעדכן את לוח הניקוד למעלה ---
