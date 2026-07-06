@@ -99,29 +99,29 @@
       display: none;
       z-index: 100;
       overflow: hidden;
-      perspective: 350px;
       pointer-events: none;   /* אפשר להמשיך לשחק מתחת בזמן שהכתוביות רצות */
     }
     #crawlOverlay.active { display: block; }
+    /* הטקסט מתחיל רחוק וקטנטן במרכז המסך, ו"טס" לעבר השחקן — גדל בהדרגה ובאיטיות */
     #crawlText {
       position: absolute;
+      top: 50%;
       left: 50%;
-      bottom: -10%;
       width: 80%;
       max-width: 480px;
-      transform: translateX(-50%) rotateX(55deg);
-      transform-origin: 50% 100%;
       color: #fbbc46;
       font-weight: bold;
       font-size: clamp(20px, 6vw, 34px);
       text-align: center;
       line-height: 1.5;
-      text-shadow: 0 0 6px rgba(251,188,70,.6);
-      animation: crawlScroll 5s linear forwards;
+      text-shadow: 0 0 10px rgba(251,188,70,.8);
+      animation: crawlApproach 6s ease-in forwards;
     }
-    @keyframes crawlScroll {
-      from { bottom: -10%;  opacity: 1; }
-      to   { bottom: 220%;  opacity: .1; }
+    @keyframes crawlApproach {
+      0%   { transform: translate(-50%, -50%) scale(.05); opacity: 0; }
+      15%  { opacity: 1; }
+      85%  { transform: translate(-50%, -50%) scale(4); opacity: 1; }
+      100% { transform: translate(-50%, -50%) scale(6); opacity: 0; }
     }
   </style>
 </head>
@@ -823,7 +823,7 @@
 
     overlay.classList.add("active");
     clearTimeout(crawlHideTimer);
-    crawlHideTimer = setTimeout(() => overlay.classList.remove("active"), 5000);
+    crawlHideTimer = setTimeout(() => overlay.classList.remove("active"), 6000);
   }
 
   // --- מעדכן את לוח הניקוד למעלה ---
