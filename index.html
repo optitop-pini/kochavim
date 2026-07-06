@@ -662,6 +662,20 @@
     ctx.strokeStyle = isSuper ? "#6b1a80" : "#a86c00";
     ctx.stroke();
 
+    // כוכב-על מקבל מספר "5" גדול וברור באמצע (רעיון של עומר) —
+    // מבטלים את הסיבוב לפני שמציירים אותו, כדי שהמספר תמיד יעמוד זקוף ויהיה קל לקרוא
+    if (isSuper) {
+      ctx.rotate(-rotation);
+      ctx.font = "bold " + Math.round(size) + "px Arial";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = "#4a0e5c";
+      ctx.strokeText("5", 0, 1);
+      ctx.fillStyle = "#ffffff";
+      ctx.fillText("5", 0, 1);
+    }
+
     ctx.restore();             // מחזירים את ה"עט" למצב הרגיל
   }
 
