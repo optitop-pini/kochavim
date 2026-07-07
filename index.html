@@ -275,6 +275,7 @@
   const BALLOON_SPEED  = 1.5;     // כמה מהר הבלון עף למעלה
   const BALLOON_COLORS = ["#ff5e5e", "#42bbc8", "#8e6fff", "#5eff8f", "#fbbc46"];  // צבעים אפשריים לבלון
   const BALLOON_TINT_FRAMES = 180;    // כמה זמן הרקע נצבע בצבע הבלון אחרי שתופסים אותו (כ-3 שניות)
+  const LEVELUP_BALLOON_SIZE = 38;    // בלון גדול יותר במיוחד — מכריז שעברנו שלב (רעיון עומר)
 
   // אלה ימולאו לפי הרמה שנבחרת (מתחילים עם ערכי "בינוני" כברירת מחדל)
   let STARTING_LIVES  = DIFFICULTIES.medium.lives;
@@ -833,21 +834,16 @@
 
   // --- הגענו ליעד הנקודות! עוברים לרמה הבאה, או מנצחים ---
   function advanceLevel() {
-    isPlaying = false;
-    playFanfareSound();              // 🎺 צליל חגיגי
+    playFanfareSound();              // 🎺 צליל חגיגי — אבל בלי לעצור את המשחק!
     const next = DIFFICULTIES[currentLevel].next;
     if (next) {
-      // יש רמה הבאה — מציגים מסך מעבר שלב
-      // אם הרמה הבאה אינסופית (אין לה יעד) — מוסיפים הסבר לשחקן
-      const nextIsEndless = !isFinite(DIFFICULTIES[next].target);
-      showScreen(
-        "כל הכבוד! 🎉 סיימת את הרמה " + DIFFICULTIES[currentLevel].name +
-        "<br>הרמה הבאה: " + DIFFICULTIES[next].name +
-        (nextIsEndless ? "<br>רמה זו אינסופית ⭐ תפסו הכי הרבה כוכבים שאפשר!" : ""),
-        [ { label: "המשך ➡️", action: () => startLevel(next) } ]
-      );
+      // ממשיכים ישר לרמה הבאה בלי לעצור את המשחק (רעיון עומר) —
+      // בלון מיוחד מכריז על המעבר במקום מסך שחוסם
+      startLevel(next);
+      spawnLevelUpBalloon(DIFFICULTIES[next].name);
     } else {
-      // אין רמה הבאה — ניצחון מוחלט! שומרים את הניקוד בטבלת השיאים
+      // אין רמה הבאה — ניצחון מוחלט! זה עדיין רגע לעצור בשבילו (בניגוד למעבר בין שלבים)
+      isPlaying = false;
       saveScoreToLeaderboard(playerName, totalScore);
       showScreen(
         "🏆 ניצחת! 🏆<br>עברת את כל הרמות — אלוף הכוכבים! ⭐" +
@@ -1029,17 +1025,39 @@
     ctx.lineWidth = 1;
     ctx.stroke();
 
-    // מספר הנקודות באמצע הבלון
-    ctx.font = "bold " + Math.round(size * 0.7) + "px Arial";
+    // הטקסט באמצע הבלון (מספר ניקוד, או שם שלב כשזה בלון הכרזת-שלב) —
+    // מקטינים את הגופן אוטומטית אם הטקסט ארוך מדי כדי שתמיד יכנס בבלון
+    const text = String(points);
+    let fontSize = Math.round(size * 0.7);
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
+    ctx.font = "bold " + fontSize + "px Arial";
+    const maxTextWidth = size * 1.5;
+    while (ctx.measureText(text).width > maxTextWidth && fontSize > 10) {
+      fontSize -= 2;
+      ctx.font = "bold " + fontSize + "px Arial";
+    }
     ctx.lineWidth = 3;
     ctx.strokeStyle = "rgba(0,0,0,0.4)";
-    ctx.strokeText(points, 0, 0);
+    ctx.strokeText(text, 0, 0);
     ctx.fillStyle = "#ffffff";
-    ctx.fillText(points, 0, 0);
+    ctx.fillText(text, 0, 0);
 
     ctx.restore();
+  }
+
+  // --- יוצר בלון-הכרזה מיוחד שמודיע שעברנו שלב (רעיון עומר) —
+  // במקום לעצור את המשחק עם מסך, מכריזים על זה דרך בלון כמו כל בלון ניקוד רגיל ---
+  function spawnLevelUpBalloon(levelName) {
+    const color = BALLOON_COLORS[Math.floor(Math.random() * BALLOON_COLORS.length)];
+    const bx = Math.max(LEVELUP_BALLOON_SIZE, Math.min(canvas.width - LEVELUP_BALLOON_SIZE, basketX + BASKET_WIDTH / 2));
+    balloons.push({
+      x: bx,
+      y: canvas.height + LEVELUP_BALLOON_SIZE,
+      color: color,
+      points: levelName,             // מציגים את שם השלב במקום מספר ניקוד
+      size: LEVELUP_BALLOON_SIZE,
+    });
   }
 
   // --- מצייר את הסלסלה ---
@@ -1116,7 +1134,7 @@
     if (frameCount % BALLOON_SPAWN_FRAMES === 0) {
       const bx = Math.random() * (canvas.width - BALLOON_SIZE * 2) + BALLOON_SIZE;
       const color = BALLOON_COLORS[Math.floor(Math.random() * BALLOON_COLORS.length)];
-      balloons.push({ x: bx, y: canvas.height + BALLOON_SIZE, color: color, points: totalScore });
+      balloons.push({ x: bx, y: canvas.height + BALLOON_SIZE, color: color, points: totalScore, size: BALLOON_SIZE });
     }
 
     // מזיזים את הסלסלה לפי המקלדת (שמאל-ימין, ועכשיו גם למעלה-למטה!)
@@ -1229,11 +1247,11 @@
     for (let i = balloons.length - 1; i >= 0; i--) {
       const balloon = balloons[i];
       balloon.y -= BALLOON_SPEED;   // הבלון עף למעלה (לא נופל כמו כוכבים ומוקשים)
-      drawBalloon(balloon.x, balloon.y, BALLOON_SIZE, balloon.color, balloon.points);
+      drawBalloon(balloon.x, balloon.y, balloon.size, balloon.color, balloon.points);
 
       // האם הסלסלה תפסה את הבלון? (אותה בדיקת "רצועה" כמו כוכבים ומוקשים)
-      const balloonCaught = balloon.y + BALLOON_SIZE > basketY &&
-                             balloon.y - BALLOON_SIZE < basketY + BASKET_HEIGHT &&
+      const balloonCaught = balloon.y + balloon.size > basketY &&
+                             balloon.y - balloon.size < basketY + BASKET_HEIGHT &&
                              balloon.x > basketX &&
                              balloon.x < basketX + BASKET_WIDTH;
       if (balloonCaught) {
@@ -1250,7 +1268,7 @@
       }
 
       // הבלון עף מעבר לראש המסך בלי שנתפס — נעלם בשקט, בלי שום עונש
-      if (balloon.y < -BALLOON_SIZE) {
+      if (balloon.y < -balloon.size) {
         balloons.splice(i, 1);
       }
     }
