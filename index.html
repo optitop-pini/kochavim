@@ -88,42 +88,6 @@
     #leaderboardBox { margin-top: 14px; font-size: 16px; }
     .lbTitle { font-weight: bold; margin-bottom: 6px; color: #fbbc46; }
     .lbRow { margin: 2px 0; }
-
-    /* ====== כתוביות "מלחמת הכוכבים" — מופיעות כל 100 נקודות (רעיון עומר) ======
-       זו שכבה שצפה מעל המשחק, ולא נוגעת בלוגיקה הפנימית שלו — לכן היא בטוחה
-       ולא יכולה "לשבור" שום דבר במשחק עצמו. */
-    #crawlOverlay {
-      position: fixed;
-      inset: 0;
-      background: rgba(0,0,0,.5);   /* שקיפות 50% — לא מעמעם מדי את המשחק מתחת */
-      display: none;
-      z-index: 100;
-      overflow: hidden;
-      pointer-events: none;   /* אפשר להמשיך לשחק מתחת בזמן שהכתוביות רצות */
-    }
-    #crawlOverlay.active { display: block; }
-    /* הטקסט יוצא מהשליש העליון של המסך, גדל וזז למרכז, נעצר שנייה, ונעלם */
-    #crawlText {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      width: 80%;
-      max-width: 480px;
-      color: #fbbc46;
-      font-weight: bold;
-      font-size: clamp(20px, 6vw, 34px);
-      text-align: center;
-      line-height: 1.5;
-      text-shadow: 0 0 10px rgba(251,188,70,.8);
-      animation: crawlApproach 4s ease-out forwards;
-    }
-    @keyframes crawlApproach {
-      0%   { transform: translate(-50%, calc(-50% - 25vh)) scale(.1); opacity: 0; }  /* מתחיל בשליש העליון, קטנטן */
-      15%  { opacity: 1; }
-      55%  { transform: translate(-50%, -50%) scale(1); opacity: 1; }   /* מגיע למרכז, בגודל מלא */
-      80%  { transform: translate(-50%, -50%) scale(1); opacity: 1; }   /* נשאר במקום — "עוצר לשנייה" */
-      100% { transform: translate(-50%, -50%) scale(1); opacity: 0; }   /* נעלם */
-    }
   </style>
 </head>
 <body>
@@ -133,11 +97,6 @@
   <div id="scoreboard">רמה: <span id="level">קל 🟢</span> &nbsp;|&nbsp; ניקוד: <span id="score">0</span> / <span id="target">20</span> &nbsp;|&nbsp; חיים: <span id="lives">❤️❤️❤️❤️❤️</span> &nbsp;|&nbsp; סה"כ: <span id="totalScoreDisplay">0</span> &nbsp;|&nbsp; 🏆 שיא: <span id="highScore">0</span></div>
 
   <canvas id="game" width="600" height="500"></canvas>
-
-  <!-- כתוביות "מלחמת הכוכבים" — מוצג כל 100 נקודות, לא חוסם את המשחק -->
-  <div id="crawlOverlay">
-    <div id="crawlText"></div>
-  </div>
 
   <div id="startScreen">
     <div id="screenMessage"></div>
@@ -200,6 +159,13 @@
   const SUPER_STAR_SIZE   = 34;    // גודל כוכב-על (גדול יותר מכוכב רגיל)
   const SUPER_STAR_VALUE  = 5;     // כמה נקודות שווה כוכב-על (במקום 1)
 
+  // --- בלון הניקוד 🎈 (רעיון של עומר) — מופיע כל 25 שניות, מראה כמה נקודות יש לך ---
+  const BALLOON_SPAWN_FRAMES = 1500;  // כל כמה פריימים מופיע בלון (בערך 25 שניות, בהנחת 60 פריימים לשנייה)
+  const BALLOON_SIZE   = 26;      // גודל הבלון
+  const BALLOON_SPEED  = 1.5;     // כמה מהר הבלון עף למעלה
+  const BALLOON_COLORS = ["#ff5e5e", "#42bbc8", "#8e6fff", "#5eff8f", "#fbbc46"];  // צבעים אפשריים לבלון
+  const BALLOON_TINT_FRAMES = 180;    // כמה זמן הרקע נצבע בצבע הבלון אחרי שתופסים אותו (כ-3 שניות)
+
   // אלה ימולאו לפי הרמה שנבחרת (מתחילים עם ערכי "בינוני" כברירת מחדל)
   let STARTING_LIVES  = DIFFICULTIES.medium.lives;
   let BASKET_WIDTH    = DIFFICULTIES.medium.basketWidth;
@@ -225,7 +191,9 @@
   const screenMessage = document.getElementById("screenMessage");
   const screenButtons = document.getElementById("screenButtons");
 
-  let basketX, basketY, score, lives, stars, mines, particles, frameCount, isPlaying;
+  let basketX, basketY, score, lives, stars, mines, particles, balloons, frameCount, isPlaying;
+  let balloonTintColor = null;   // צבע הרקע הזמני אחרי תפיסת בלון (null = אין צביעה כרגע)
+  let balloonTintFramesLeft = 0;
   let currentLevel = "easy";   // הרמה שבה משחקים כרגע (תמיד מתחילים מ"קל")
   let playerName = "שחקן אלמוני";   // שם השחקן הנוכחי
   let totalScore = 0;               // סך כל הכוכבים שנאספו בריצה הנוכחית (לכל השלבים ביחד)
@@ -612,6 +580,9 @@
     stars = [];
     mines = [];
     particles = [];
+    balloons = [];
+    balloonTintColor = null;
+    balloonTintFramesLeft = 0;
     frameCount = 0;
     isPlaying = true;
     startScreen.style.display = "none";
@@ -790,6 +761,52 @@
     }
   }
 
+  // --- מצייר בלון ניקוד 🎈 (רעיון עומר) — עם מספר הנקודות באמצע ---
+  function drawBalloon(x, y, size, color, points) {
+    ctx.save();
+    ctx.translate(x, y);
+
+    // גוף הבלון — מעבר צבעים כדי שייראה עגול ומבריק
+    const grad = ctx.createRadialGradient(-size * 0.3, -size * 0.35, size * 0.15, 0, 0, size);
+    grad.addColorStop(0, "#ffffff");
+    grad.addColorStop(0.35, color);
+    grad.addColorStop(1, color);
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, size * 0.8, size, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "rgba(0,0,0,0.25)";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // קשר קטן וחוט למטה
+    ctx.beginPath();
+    ctx.moveTo(-4, size);
+    ctx.lineTo(4, size);
+    ctx.lineTo(0, size + 8);
+    ctx.closePath();
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(0, size + 8);
+    ctx.lineTo(0, size + 24);
+    ctx.strokeStyle = "#8a7256";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // מספר הנקודות באמצע הבלון
+    ctx.font = "bold " + Math.round(size * 0.7) + "px Arial";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = "rgba(0,0,0,0.4)";
+    ctx.strokeText(points, 0, 0);
+    ctx.fillStyle = "#ffffff";
+    ctx.fillText(points, 0, 0);
+
+    ctx.restore();
+  }
+
   // --- מצייר את הסלסלה ---
   function drawBasket() {
     const y = basketY;   // המיקום האנכי האמיתי של הסלסלה (יכול לזוז למעלה/למטה)
@@ -805,26 +822,6 @@
     ctx.strokeStyle = "#282355";
     ctx.lineWidth = 2;
     ctx.stroke();
-  }
-
-  // --- מציג כתוביות "מלחמת הכוכבים" חוגגות כל 100 נקודות (רעיון עומר) ---
-  // זו שכבה נפרדת שצפה מעל המשחק — לא עוצרת ולא נוגעת בלולאת המשחק עצמה
-  let crawlHideTimer = null;
-  function showCrawl(points) {
-    const overlay = document.getElementById("crawlOverlay");
-    const textEl = document.getElementById("crawlText");
-    textEl.innerHTML =
-      "אלוף הכוכבים ⭐<br><br>" +
-      playerName + " עבר כבר<br>" + points + "<br>נקודות!<br><br>המשך כך...";
-
-    // מאתחלים את האנימציה מחדש (חשוב אם זה כבר קרה קודם באותה ריצה)
-    textEl.style.animation = "none";
-    void textEl.offsetWidth;   // "טריק" שמאלץ את הדפדפן לאפס את האנימציה לפני שמפעילים אותה שוב
-    textEl.style.animation = "";
-
-    overlay.classList.add("active");
-    clearTimeout(crawlHideTimer);
-    crawlHideTimer = setTimeout(() => overlay.classList.remove("active"), 4000);
   }
 
   // --- מעדכן את לוח הניקוד למעלה ---
@@ -855,6 +852,15 @@
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     if (currentBg) ctx.drawImage(currentBg, 0, 0);
 
+    // אם תפסנו בלון לאחרונה — צובעים את הרקע זמנית בצבע שלו (רעיון עומר) 🎈
+    if (balloonTintFramesLeft > 0) {
+      ctx.fillStyle = balloonTintColor;
+      ctx.globalAlpha = 0.35;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.globalAlpha = 1;
+      balloonTintFramesLeft--;
+    }
+
     // יוצרים כוכב חדש מדי פעם, במיקום אקראי
     if (frameCount % STAR_SPAWN_RATE === 0) {
       const isSuper = Math.random() < SUPER_STAR_CHANCE;   // סיכוי נמוך שזה יהיה כוכב-על ⭐✨
@@ -868,6 +874,13 @@
     if (frameCount % MINE_SPAWN_RATE === 0) {
       const mx = Math.random() * (canvas.width - MINE_SIZE * 2) + MINE_SIZE;
       mines.push({ x: mx, y: -MINE_SIZE });
+    }
+
+    // יוצרים בלון ניקוד חדש כל 25 שניות בערך — עולה מלמטה כלפי מעלה 🎈 (רעיון עומר)
+    if (frameCount % BALLOON_SPAWN_FRAMES === 0) {
+      const bx = Math.random() * (canvas.width - BALLOON_SIZE * 2) + BALLOON_SIZE;
+      const color = BALLOON_COLORS[Math.floor(Math.random() * BALLOON_COLORS.length)];
+      balloons.push({ x: bx, y: canvas.height + BALLOON_SIZE, color: color, points: totalScore });
     }
 
     // מזיזים את הסלסלה לפי המקלדת (שמאל-ימין, ועכשיו גם למעלה-למטה!)
@@ -894,13 +907,8 @@
                      star.x < basketX + BASKET_WIDTH;
       if (caught) {
         const gained = star.isSuper ? SUPER_STAR_VALUE : 1;   // כוכב-על שווה יותר נקודות ⭐✨
-        const hundredsBefore = Math.floor(totalScore / 100);   // כמה "מאות" עברנו לפני הכוכב הזה
         score += gained;
         totalScore += gained;   // סופרים גם לסך הכל של כל הריצה (לטבלת השיאים)
-        const hundredsAfter = Math.floor(totalScore / 100);
-        if (hundredsAfter > hundredsBefore) {
-          showCrawl(hundredsAfter * 100);   // עברנו רף חדש של 100 — כתוביות מלחמת הכוכבים! 🌌
-        }
         stars.splice(i, 1);   // מוחקים את הכוכב שנתפס
         updateScoreboard();
         playWinSound();        // 🎉 צליל ניצחון!
@@ -978,6 +986,36 @@
           }
           break;   // המוקש הזה כבר התפוצץ — עוברים לבדוק את המוקש הבא
         }
+      }
+    }
+
+    // מזיזים, מציירים ובודקים תפיסה של בלוני ניקוד 🎈 (רעיון עומר)
+    for (let i = balloons.length - 1; i >= 0; i--) {
+      const balloon = balloons[i];
+      balloon.y -= BALLOON_SPEED;   // הבלון עף למעלה (לא נופל כמו כוכבים ומוקשים)
+      drawBalloon(balloon.x, balloon.y, BALLOON_SIZE, balloon.color, balloon.points);
+
+      // האם הסלסלה תפסה את הבלון? (אותה בדיקת "רצועה" כמו כוכבים ומוקשים)
+      const balloonCaught = balloon.y + BALLOON_SIZE > basketY &&
+                             balloon.y - BALLOON_SIZE < basketY + BASKET_HEIGHT &&
+                             balloon.x > basketX &&
+                             balloon.x < basketX + BASKET_WIDTH;
+      if (balloonCaught) {
+        balloons.splice(i, 1);
+        // הרבה זיקוקים חגיגיים! 🎆🎆🎆
+        spawnFirework(balloon.x, balloon.y);
+        spawnFirework(balloon.x - 20, balloon.y - 15);
+        spawnFirework(balloon.x + 20, balloon.y - 15);
+        playFireworkSound();
+        // הרקע מתחלף לצבע הבלון לכמה שניות
+        balloonTintColor = balloon.color;
+        balloonTintFramesLeft = BALLOON_TINT_FRAMES;
+        continue;
+      }
+
+      // הבלון עף מעבר לראש המסך בלי שנתפס — נעלם בשקט, בלי שום עונש
+      if (balloon.y < -BALLOON_SIZE) {
+        balloons.splice(i, 1);
       }
     }
 
