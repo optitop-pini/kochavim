@@ -85,6 +85,18 @@
     }
     .nameRow input.invalid { border-color: #ff5e5e; }
     .nameError { color: #ff5e5e; font-size: 14px; min-height: 18px; margin-top: 4px; }
+    .colorRow { margin: 10px 0; font-size: 16px; }
+    .colorRow input {
+      margin-inline-start: 8px;
+      width: 44px;
+      height: 32px;
+      padding: 0;
+      border: 1px solid #42bbc8;
+      border-radius: 8px;
+      background: none;
+      cursor: pointer;
+      vertical-align: middle;
+    }
     #leaderboardBox { margin-top: 14px; font-size: 16px; }
     .lbTitle { font-weight: bold; margin-bottom: 6px; color: #fbbc46; }
     .lbRow { margin: 2px 0; }
@@ -196,6 +208,7 @@
   let balloonTintFramesLeft = 0;
   let currentLevel = "easy";   // הרמה שבה משחקים כרגע (תמיד מתחילים מ"קל")
   let playerName = "שחקן אלמוני";   // שם השחקן הנוכחי
+  let basketColor = "#42bbc8";       // צבע הסלסלה (רעיון עומר) — אפשר לבחור צבע אישי
   let totalScore = 0;               // סך כל הכוכבים שנאספו בריצה הנוכחית (לכל השלבים ביחד)
   let moveLeft = false, moveRight = false, moveUp = false, moveDown = false;
 
@@ -517,12 +530,15 @@
     // אם זה מה שנשמר, מתייחסים אליו כאילו לא נשמר שם, כדי שהשדה יתחיל ריק
     let savedName = localStorage.getItem("starsPlayerName") || "";
     if (savedName === "שחקן אלמוני") savedName = "";
+    const savedColor = localStorage.getItem("starsBasketColor") || basketColor;
     screenMessage.innerHTML =
       "⭐ כוכבים נופלים ⭐<br>אספו 20 כוכבים כדי לעבור שלב!<br>היזהרו מהמוקשים 💣" +
       '<div class="nameRow">השם שלי: <input id="playerNameInput" type="text" maxlength="12" placeholder="הקלידו שם"></div>' +
       '<div class="nameError" id="nameError"></div>' +
+      '<div class="colorRow">צבע הסלסלה שלי: <input id="basketColorInput" type="color"></div>' +
       '<div id="leaderboardSlot">' + renderLeaderboard() + '</div>';
     document.getElementById("playerNameInput").value = savedName;
+    document.getElementById("basketColorInput").value = savedColor;
     refreshOnlineLeaderboard();   // מחליפים בטבלה המקוונת (משותפת לכולם) ברגע שהיא מגיעה
 
     screenButtons.innerHTML = "";
@@ -552,6 +568,13 @@
 
     playerName = name;
     localStorage.setItem("starsPlayerName", playerName);   // זוכרים את השם לפעם הבאה
+
+    const colorInput = document.getElementById("basketColorInput");
+    if (colorInput) {
+      basketColor = colorInput.value;
+      localStorage.setItem("starsBasketColor", basketColor);   // זוכרים את הצבע לפעם הבאה
+    }
+
     totalScore = 0;                                        // מאפסים את סך הניקוד לריצה חדשה
     startLevel("easy");
   }
@@ -810,7 +833,7 @@
   // --- מצייר את הסלסלה ---
   function drawBasket() {
     const y = basketY;   // המיקום האנכי האמיתי של הסלסלה (יכול לזוז למעלה/למטה)
-    ctx.fillStyle = "#42bbc8";
+    ctx.fillStyle = basketColor;   // הצבע שהשחקן בחר (רעיון עומר)
     ctx.beginPath();
     ctx.moveTo(basketX, y);
     ctx.lineTo(basketX + BASKET_WIDTH, y);
