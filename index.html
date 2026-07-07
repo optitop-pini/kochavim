@@ -100,15 +100,113 @@
     #leaderboardBox { margin-top: 14px; font-size: 16px; }
     .lbTitle { font-weight: bold; margin-bottom: 6px; color: #fbbc46; }
     .lbRow { margin: 2px 0; }
+
+    /* ====== מרוץ עם חבר 🏁 (רעיון עומר) — כפתור שיתוף + חלון קוד ====== */
+    #shareBtn {
+      position: fixed;
+      top: 12px;
+      inset-inline-end: 12px;   /* בצד — מתאים גם ל-RTL וגם ל-LTR */
+      z-index: 60;
+      padding: 6px 14px;
+      font-size: 14px;
+      border: none;
+      border-radius: 20px;
+      background: #42bbc8;
+      color: #282355;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    #shareModal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 70;
+      background: rgba(0,0,0,.6);
+      align-items: center;
+      justify-content: center;
+    }
+    #shareModal.active { display: flex; }
+    #shareModalBox {
+      background: #12183f;
+      border: 2px solid #42bbc8;
+      border-radius: 16px;
+      padding: 22px 28px;
+      max-width: 320px;
+      width: 85%;
+      text-align: center;
+    }
+    .shareTitle { font-size: 20px; font-weight: bold; color: #fbbc46; margin-bottom: 14px; }
+    .shareHint { font-size: 14px; opacity: .85; margin-top: 10px; }
+    #shareCodeBig {
+      font-size: 40px;
+      font-weight: bold;
+      letter-spacing: 4px;
+      color: #42bbc8;
+      background: #0b1026;
+      border-radius: 10px;
+      padding: 10px;
+      margin: 8px 0;
+      direction: ltr;   /* הקוד עצמו תמיד משמאל-לימין, גם בעמוד עברי */
+    }
+    #joinCodeInput {
+      font-size: 22px;
+      text-align: center;
+      letter-spacing: 3px;
+      width: 140px;
+      padding: 6px;
+      border-radius: 8px;
+      border: 1px solid #42bbc8;
+      background: #0b1026;
+      color: white;
+      direction: ltr;
+    }
+    #shareCloseBtn {
+      margin-top: 14px;
+      background: none;
+      border: 1px solid #42bbc8;
+      color: white;
+      padding: 6px 18px;
+      border-radius: 10px;
+      cursor: pointer;
+    }
+    #raceStatus { font-size: 15px; margin-top: 4px; color: #5eff8f; min-height: 18px; }
   </style>
 </head>
 <body>
 
+  <!-- כפתור "מרוץ עם חבר" (רעיון עומר) — קטן, בצד, לא מפריע למשחק -->
+  <button id="shareBtn">🔗 שתף</button>
+
   <h1>⭐ כוכבים נופלים ⭐</h1>
   <p id="lhuh">הזיזו את הסלסלה עם החיצים ← → ותפסו כוכבים!</p>
   <div id="scoreboard">רמה: <span id="level">קל 🟢</span> &nbsp;|&nbsp; ניקוד: <span id="score">0</span> / <span id="target">20</span> &nbsp;|&nbsp; חיים: <span id="lives">❤️❤️❤️❤️❤️</span> &nbsp;|&nbsp; סה"כ: <span id="totalScoreDisplay">0</span> &nbsp;|&nbsp; 🏆 שיא: <span id="highScore">0</span></div>
+  <div id="raceStatus"></div>
 
   <canvas id="game" width="600" height="500"></canvas>
+
+  <!-- חלון "מרוץ עם חבר" — שיתוף קוד או הצטרפות עם קוד -->
+  <div id="shareModal">
+    <div id="shareModalBox">
+      <div id="shareChoiceView">
+        <div class="shareTitle">מרוץ עם חבר 🏁</div>
+        <button class="diffBtn" id="shareCreateBtn">שתף קוד 📤</button>
+        <button class="diffBtn" id="shareJoinBtn">הצטרף עם קוד 📥</button>
+      </div>
+      <div id="shareCodeView" style="display:none;">
+        <div class="shareTitle">הקוד שלך:</div>
+        <div id="shareCodeBig"></div>
+        <div class="shareHint">ספר את הקוד לחבר שלך — הוא יקליד אותו כדי להצטרף!</div>
+      </div>
+      <div id="shareJoinView" style="display:none;">
+        <div class="shareTitle">הקלד את הקוד של החבר:</div>
+        <input id="joinCodeInput" type="text" maxlength="6" placeholder="ABC123">
+        <br>
+        <button class="diffBtn" id="joinSubmitBtn">הצטרף למרוץ 🏁</button>
+        <div id="joinError" class="nameError"></div>
+      </div>
+      <button id="shareCloseBtn">סגור</button>
+    </div>
+  </div>
 
   <div id="startScreen">
     <div id="screenMessage"></div>
@@ -264,6 +362,120 @@
     return db.collection("scores").orderBy("score", "desc").limit(3).get()
       .then((snapshot) => snapshot.docs.map((doc) => doc.data()))
       .catch(() => null);
+  }
+
+  // =========================================================
+  //  🏁 מרוץ ניקוד חי עם חבר (רעיון עומר) — כל אחד משחק לבד,
+  //  אבל רואים את הניקוד של החבר מתעדכן בזמן אמת דרך Firestore.
+  // =========================================================
+  let raceCode = null;         // הקוד של המרוץ הנוכחי (null = לא מחוברים)
+  let raceRole = null;         // "host" (מי שיצר את הקוד) או "guest" (מי שהצטרף)
+  let raceUnsubscribe = null;  // פונקציה לעצירת ההאזנה בזמן אמת
+
+  function generateRaceCode() {
+    return Math.random().toString(36).slice(2, 7).toUpperCase();   // 5 תווים, קל להקריא לחבר
+  }
+
+  // --- מציגים/מסתירים את חלון "מרוץ עם חבר" ---
+  function openShareModal() {
+    showShareChoiceView();
+    document.getElementById("shareModal").classList.add("active");
+  }
+  function closeShareModal() {
+    document.getElementById("shareModal").classList.remove("active");   // רק סוגר את החלון, לא מנתק מהמרוץ
+  }
+  function showShareChoiceView() {
+    document.getElementById("shareChoiceView").style.display = "block";
+    document.getElementById("shareCodeView").style.display = "none";
+    document.getElementById("shareJoinView").style.display = "none";
+  }
+  function showShareCodeView(code) {
+    document.getElementById("shareChoiceView").style.display = "none";
+    document.getElementById("shareCodeView").style.display = "block";
+    document.getElementById("shareJoinView").style.display = "none";
+    document.getElementById("shareCodeBig").textContent = code;
+  }
+  function showShareJoinView() {
+    document.getElementById("shareChoiceView").style.display = "none";
+    document.getElementById("shareCodeView").style.display = "none";
+    document.getElementById("shareJoinView").style.display = "block";
+    document.getElementById("joinError").textContent = "";
+    document.getElementById("joinCodeInput").value = "";
+  }
+
+  // --- יוצרים מרוץ חדש ומקבלים קוד לשתף עם חבר ---
+  function createRace() {
+    if (!firebaseReady) { showShareCodeView("---"); return; }
+    const code = generateRaceCode();
+    const data = {
+      hostName: playerName || "שחקן",
+      hostScore: totalScore || 0,
+      guestName: null,
+      guestScore: null,
+      createdAt: Date.now(),
+    };
+    db.collection("races").doc(code).set(data).then(() => {
+      raceCode = code;
+      raceRole = "host";
+      showShareCodeView(code);
+      listenToRace(code);
+    }).catch(() => {
+      showShareCodeView("שגיאה, נסו שוב");
+    });
+  }
+
+  // --- מצטרפים למרוץ קיים לפי קוד שקיבלנו מחבר ---
+  function joinRace() {
+    const input = document.getElementById("joinCodeInput");
+    const code = input.value.trim().toUpperCase();
+    const errorEl = document.getElementById("joinError");
+    errorEl.textContent = "";
+
+    if (!code) { errorEl.textContent = "הקלידו קוד קודם ✏️"; return; }
+    if (!firebaseReady) { errorEl.textContent = "אין כרגע חיבור לאינטרנט"; return; }
+
+    const docRef = db.collection("races").doc(code);
+    docRef.get().then((doc) => {
+      if (!doc.exists) { errorEl.textContent = "לא מצאנו קוד כזה 🤔"; return; }
+      const data = doc.data();
+      if (data.guestName) { errorEl.textContent = "כבר יש חבר במרוץ הזה"; return; }
+
+      docRef.set({
+        hostName: data.hostName,
+        hostScore: data.hostScore,
+        guestName: playerName || "שחקן",
+        guestScore: totalScore || 0,
+        createdAt: data.createdAt,
+      }).then(() => {
+        raceCode = code;
+        raceRole = "guest";
+        closeShareModal();
+        listenToRace(code);
+      }).catch(() => { errorEl.textContent = "לא הצלחנו להצטרף, נסו שוב"; });
+    }).catch(() => { errorEl.textContent = "שגיאה בחיפוש הקוד"; });
+  }
+
+  // --- מאזינים למרוץ בזמן אמת, ומעדכנים את הניקוד של החבר על המסך ---
+  function listenToRace(code) {
+    if (raceUnsubscribe) raceUnsubscribe();   // מפסיקים להאזין למרוץ קודם, אם היה כזה
+    raceUnsubscribe = db.collection("races").doc(code).onSnapshot((doc) => {
+      if (!doc.exists) return;
+      const data = doc.data();
+      const isHost = raceRole === "host";
+      const friendNm = isHost ? data.guestName : data.hostName;
+      const friendSc = isHost ? data.guestScore : data.hostScore;
+      const statusEl = document.getElementById("raceStatus");
+      statusEl.textContent = friendNm
+        ? "🏁 " + friendNm + ": " + friendSc + " נקודות"
+        : "🏁 ממתינים שחבר יצטרף... קוד: " + code;
+    }, () => {});   // מתעלמים משגיאות חיבור זמניות
+  }
+
+  // --- שולחים את הניקוד שלנו למרוץ בכל פעם שהוא מתעדכן (אם מחוברים) ---
+  function pushMyScoreToRace() {
+    if (!raceCode || !firebaseReady) return;
+    const field = raceRole === "host" ? "hostScore" : "guestScore";
+    db.collection("races").doc(raceCode).update({ [field]: totalScore }).catch(() => {});
   }
 
   // טוענים את השיא מהזיכרון של הדפדפן (אם אין עדיין — מתחילים מ-0).
@@ -857,6 +1069,7 @@
     levelEl.textContent = DIFFICULTIES[currentLevel].name;      // שם הרמה
     livesEl.textContent = "❤️".repeat(lives) || "💔";
     totalScoreEl.textContent = totalScore;                      // סך הכוכבים בריצה הנוכחית
+    pushMyScoreToRace();   // אם יש מרוץ חי עם חבר — מעדכנים גם את הניקוד שלנו שם 🏁
 
     // אם הניקוד הנוכחי עבר את השיא — מעדכנים ושומרים בזיכרון
     if (score > highScore) {
@@ -1089,6 +1302,13 @@
     moveBasketTo(e.touches[0].clientX, e.touches[0].clientY);
     e.preventDefault();
   }, { passive: false });
+
+  // ====== חיבור כפתורי חלון "מרוץ עם חבר" 🏁 ======
+  document.getElementById("shareBtn").onclick = openShareModal;
+  document.getElementById("shareCreateBtn").onclick = createRace;
+  document.getElementById("shareJoinBtn").onclick = showShareJoinView;
+  document.getElementById("joinSubmitBtn").onclick = joinRace;
+  document.getElementById("shareCloseBtn").onclick = closeShareModal;
 
   // כשהדף נטען — מציגים את מסך בחירת הרמה (המשחק מתחיל רק אחרי בחירה)
   showStartScreen();
