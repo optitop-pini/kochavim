@@ -315,6 +315,8 @@
   const BASKET_HEIGHT = 28;              // עובי הסלסלה (לבדיקת תפיסה מדויקת)
   const BASKET_MAX_Y  = canvas.height - 30;  // הכי נמוך שהסלסלה יכולה להיות (המקום המקורי, למטה)
   const BASKET_MIN_Y  = 180;                 // הכי גבוה שהסלסלה יכולה לעוף
+  // בנייד: הסלסלה מופיעה מעל האצבע (בערך סלסלה וחצי), כדי שהאצבע לא תסתיר אותה (רעיון עומר)
+  const TOUCH_LIFT    = BASKET_HEIGHT * 1.5;
 
   // איפוס טבלת השיאים לכל השחקנים — עולה פעם אחת עם כל גרסה חדשה של המשחק.
   // מי שכבר שיחק בגרסה ישנה יתחיל מחדש מ-0 ברגע שהוא פותח את הגרסה הזו.
@@ -1050,13 +1052,15 @@
   // במקום לעצור את המשחק עם מסך, מכריזים על זה דרך בלון כמו כל בלון ניקוד רגיל ---
   function spawnLevelUpBalloon(levelName) {
     const color = BALLOON_COLORS[Math.floor(Math.random() * BALLOON_COLORS.length)];
-    const bx = Math.max(LEVELUP_BALLOON_SIZE, Math.min(canvas.width - LEVELUP_BALLOON_SIZE, basketX + BASKET_WIDTH / 2));
+    // מיקום אקראי (לא מעל הסלסלה!) כדי שהבלון יעלה ויוצג יפה, ולא ייתפס מיד בתחתית
+    const bx = Math.random() * (canvas.width - LEVELUP_BALLOON_SIZE * 2) + LEVELUP_BALLOON_SIZE;
     balloons.push({
       x: bx,
       y: canvas.height + LEVELUP_BALLOON_SIZE,
       color: color,
       points: levelName,             // מציגים את שם השלב במקום מספר ניקוד
       size: LEVELUP_BALLOON_SIZE,
+      announce: true,                // בלון הכרזה — רק עולה ומוצג, לא נתפס ולא מתפוצץ
     });
   }
 
@@ -1250,7 +1254,9 @@
       drawBalloon(balloon.x, balloon.y, balloon.size, balloon.color, balloon.points);
 
       // האם הסלסלה תפסה את הבלון? (אותה בדיקת "רצועה" כמו כוכבים ומוקשים)
-      const balloonCaught = balloon.y + balloon.size > basketY &&
+      // בלון הכרזת-שלב (announce) לא נתפס — הוא רק עולה, מוצג, ונעלם בראש המסך
+      const balloonCaught = !balloon.announce &&
+                             balloon.y + balloon.size > basketY &&
                              balloon.y - balloon.size < basketY + BASKET_HEIGHT &&
                              balloon.x > basketX &&
                              balloon.x < basketX + BASKET_WIDTH;
@@ -1308,18 +1314,22 @@
   });
 
   // ====== שליטה בעכבר ובמגע (לנייד) — עכשיו גם למעלה/למטה ======
-  function moveBasketTo(clientX, clientY) {
+  // lift = כמה "להרים" את הסלסלה מעל נקודת המגע. 0 לעכבר, TOUCH_LIFT לאצבע בנייד.
+  function moveBasketTo(clientX, clientY, lift) {
     const rect = canvas.getBoundingClientRect();
     const scaleX = canvas.width / rect.width;
     const scaleY = canvas.height / rect.height;
     basketX = (clientX - rect.left) * scaleX - BASKET_WIDTH / 2;
-    basketY = (clientY - rect.top) * scaleY - BASKET_HEIGHT / 2;
+    basketY = (clientY - rect.top) * scaleY - BASKET_HEIGHT / 2 - (lift || 0);
   }
-  canvas.addEventListener("mousemove", (e) => moveBasketTo(e.clientX, e.clientY));
-  canvas.addEventListener("touchmove", (e) => {
-    moveBasketTo(e.touches[0].clientX, e.touches[0].clientY);
+  canvas.addEventListener("mousemove", (e) => moveBasketTo(e.clientX, e.clientY, 0));
+  // במגע: מרימים את הסלסלה מעל האצבע כדי שהיא לא תסתיר אותה (במיוחד ברמה קשה כשהסלסלה קטנה)
+  function handleTouch(e) {
+    moveBasketTo(e.touches[0].clientX, e.touches[0].clientY, TOUCH_LIFT);
     e.preventDefault();
-  }, { passive: false });
+  }
+  canvas.addEventListener("touchstart", handleTouch, { passive: false });
+  canvas.addEventListener("touchmove", handleTouch, { passive: false });
 
   // ====== חיבור כפתורי חלון "מרוץ עם חבר" 🏁 ======
   document.getElementById("shareBtn").onclick = openShareModal;
