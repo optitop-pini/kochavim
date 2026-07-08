@@ -44,6 +44,17 @@
       max-width: 96vw;
       touch-action: none;
     }
+    /* רעידת מסך כשמוקש פוגע בסלסלה 💥 (רעיון עומר) — המסך מרטט מהר במקום וחוזר */
+    @keyframes shake {
+      0%, 100% { transform: translate(0, 0); }
+      15% { transform: translate(-8px, 4px); }
+      30% { transform: translate(7px, -6px); }
+      45% { transform: translate(-6px, -4px); }
+      60% { transform: translate(6px, 5px); }
+      75% { transform: translate(-4px, 3px); }
+      90% { transform: translate(3px, -2px); }
+    }
+    canvas.shake { animation: shake 0.35s ease-in-out; }
     #startScreen {
       position: absolute;
       top: 50%;
@@ -1132,6 +1143,13 @@
     highScoreEl.textContent = highScore;
   }
 
+  // --- מרעיד את המסך לרגע קצר (רעיון עומר) — כשמוקש פוגע בסלסלה 💥 ---
+  function shakeScreen() {
+    canvas.classList.remove("shake");
+    void canvas.offsetWidth;   // "טריק" שמאלץ את הדפדפן לאתחל את האנימציה, כדי שתעבוד גם בפגיעות רצופות
+    canvas.classList.add("shake");
+  }
+
   // --- הלולאה הראשית: רצה ~60 פעמים בשנייה ---
   function loop() {
     if (!isPlaying) return;
@@ -1244,6 +1262,7 @@
         mines.splice(i, 1);     // המוקש התפוצץ — מוחקים אותו
         lives--;                // מאבדים לב אחד
         updateScoreboard();
+        shakeScreen();          // 💥 המסך רועד מהפגיעה! (רעיון עומר)
         if (lives <= 0) {       // רק אם נגמרו כל הלבבות — סוף משחק
           gameOver();
           return;
