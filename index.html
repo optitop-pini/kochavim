@@ -269,6 +269,11 @@
   const SUPER_STAR_SIZE   = 34;    // גודל כוכב-על (גדול יותר מכוכב רגיל)
   const SUPER_STAR_VALUE  = 5;     // כמה נקודות שווה כוכב-על (במקום 1)
 
+  // --- כוכב זהב ⭐ (נדיר מאוד! שווה הכי הרבה נקודות) — רעיון של עומר ---
+  const GOLD_STAR_CHANCE  = 0.03;  // נדיר מאוד — רק 3% מהכוכבים
+  const GOLD_STAR_SIZE    = 38;    // הכי גדול
+  const GOLD_STAR_VALUE   = 10;    // שווה 10 נקודות!
+
   // --- בלון הניקוד 🎈 (רעיון של עומר) — מופיע כל 25 שניות, מראה כמה נקודות יש לך ---
   const BALLOON_SPAWN_FRAMES = 1500;  // כל כמה פריימים מופיע בלון (בערך 25 שניות, בהנחת 60 פריימים לשנייה)
   const BALLOON_SIZE   = 26;      // גודל הבלון
@@ -858,7 +863,7 @@
   }
 
   // --- מצייר כוכב תלת-ממדי מבריק במקום מסוים ---
-  function drawStar(x, y, size, rotation, isSuper) {
+  function drawStar(x, y, size, rotation, kind) {
     ctx.save();
     ctx.translate(x, y);       // מזיזים את "העט" למרכז הכוכב
     ctx.rotate(rotation);      // מסובבים אותו — נותן תחושת תלת-ממד
@@ -873,52 +878,59 @@
     }
     ctx.closePath();
 
-    // כוכב-על מקבל זוהר ורוד-סגול נוסף סביבו, כדי להיראות מיוחד ובולט
-    if (isSuper) {
-      ctx.shadowColor = "#ff5ec4";
+    // בוחרים צבעים, זוהר, ומספר לפי סוג הכוכב
+    let glow = null, c0, c1, c2, outline, label = null, labelOutline;
+    if (kind === "gold") {          // כוכב זהב נדיר מאוד ⭐ — שווה 10 (רעיון עומר)
+      glow = "#ffd24d"; c0 = "#fffbe6"; c1 = "#ffd400"; c2 = "#b8860b"; outline = "#8a6d00";
+      label = "10"; labelOutline = "#6b5200";
+    } else if (kind === "super") {  // כוכב-על ורוד ✨ — שווה 5
+      glow = "#ff5ec4"; c0 = "#ffe3fb"; c1 = "#ff6fd8"; c2 = "#9a2fb0"; outline = "#6b1a80";
+      label = "5"; labelOutline = "#4a0e5c";
+    } else {                        // כוכב רגיל — שווה 1
+      c0 = "#fff3c4"; c1 = "#fbbc46"; c2 = "#c8860a"; outline = "#a86c00";
+    }
+
+    // כוכבים מיוחדים מקבלים זוהר צבעוני; כוכב רגיל מקבל צל רך שנותן תחושת ריחוף
+    if (glow) {
+      ctx.shadowColor = glow;
       ctx.shadowBlur = 20;
     } else {
-      // צל מתחת לכוכב הרגיל — נותן תחושה שהוא "מרחף" מעל הרקע
       ctx.shadowColor = "rgba(0,0,0,0.5)";
       ctx.shadowBlur = 8;
       ctx.shadowOffsetX = 3;
       ctx.shadowOffsetY = 4;
     }
 
-    // מילוי במעבר צבעים (gradient): בהיר במרכז-עליון, כהה בקצה.
-    // זה הסוד שגורם לכוכב להיראות תלת-ממדי ומבריק כמו מתכת.
-    // כוכב-על מקבל ערכת צבעים ורודה-סגולה במקום זהב, כדי לבלוט מיד.
+    // מילוי במעבר צבעים (gradient) — נותן לכוכב מראה תלת-ממדי ומבריק כמו מתכת
     const grad = ctx.createRadialGradient(-size / 3, -size / 3, size / 8, 0, 0, size);
-    if (isSuper) {
-      grad.addColorStop(0,   "#ffe3fb");   // ברק לבן-ורדרד
-      grad.addColorStop(0.5, "#ff6fd8");   // ורוד עז
-      grad.addColorStop(1,   "#9a2fb0");   // סגול כהה
-    } else {
-      grad.addColorStop(0,   "#fff3c4");   // נקודת אור בהירה (ה"ברק")
-      grad.addColorStop(0.5, "#fbbc46");   // צהוב המותג
-      grad.addColorStop(1,   "#c8860a");   // צל כתום-כהה
-    }
+    grad.addColorStop(0,   c0);   // נקודת אור בהירה (ה"ברק")
+    grad.addColorStop(0.5, c1);
+    grad.addColorStop(1,   c2);   // צל כהה בקצה
     ctx.fillStyle = grad;
     ctx.fill();
 
     // קו מתאר כהה — מדגיש את הקצוות ומחזק את העומק
     ctx.shadowColor = "transparent";     // מבטלים צל בשביל הקו עצמו
     ctx.lineWidth = 1.5;
-    ctx.strokeStyle = isSuper ? "#6b1a80" : "#a86c00";
+    ctx.strokeStyle = outline;
     ctx.stroke();
 
-    // כוכב-על מקבל מספר "5" גדול וברור באמצע (רעיון של עומר) —
-    // מבטלים את הסיבוב לפני שמציירים אותו, כדי שהמספר תמיד יעמוד זקוף ויהיה קל לקרוא
-    if (isSuper) {
+    // מספר על הכוכב (5 לכוכב-על, 10 לכוכב זהב) — מבטלים את הסיבוב כדי שיישאר זקוף וקריא
+    if (label) {
       ctx.rotate(-rotation);
-      ctx.font = "bold " + Math.round(size) + "px Arial";
+      let fs = Math.round(size);
+      ctx.font = "bold " + fs + "px Arial";
+      while (ctx.measureText(label).width > size * 1.3 && fs > 10) {
+        fs -= 2;
+        ctx.font = "bold " + fs + "px Arial";
+      }
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.lineWidth = 3;
-      ctx.strokeStyle = "#4a0e5c";
-      ctx.strokeText("5", 0, 1);
+      ctx.strokeStyle = labelOutline;
+      ctx.strokeText(label, 0, 1);
       ctx.fillStyle = "#ffffff";
-      ctx.fillText("5", 0, 1);
+      ctx.fillText(label, 0, 1);
     }
 
     ctx.restore();             // מחזירים את ה"עט" למצב הרגיל
@@ -1079,6 +1091,25 @@
     ctx.strokeStyle = "#282355";
     ctx.lineWidth = 2;
     ctx.stroke();
+
+    // מציגים את הניקוד הנוכחי ישר על הסלסלה (רעיון עומר) — תמיד רואים כמה נקודות יש
+    ctx.save();
+    const scoreText = String(totalScore);
+    let fs = 15;
+    ctx.font = "bold " + fs + "px Arial";
+    // אם המספר גדול ולא נכנס ברוחב הסלסלה — מקטינים אותו קצת
+    while (ctx.measureText(scoreText).width > BASKET_WIDTH - 16 && fs > 9) {
+      fs--;
+      ctx.font = "bold " + fs + "px Arial";
+    }
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = "rgba(0,0,0,0.6)";      // מתאר כהה — קריא על כל צבע סלסלה
+    ctx.strokeText(scoreText, basketX + BASKET_WIDTH / 2, y + 14);
+    ctx.fillStyle = "#ffffff";
+    ctx.fillText(scoreText, basketX + BASKET_WIDTH / 2, y + 14);
+    ctx.restore();
   }
 
   // --- מעדכן את לוח הניקוד למעלה ---
@@ -1119,13 +1150,19 @@
       balloonTintFramesLeft--;
     }
 
-    // יוצרים כוכב חדש מדי פעם, במיקום אקראי
+    // יוצרים כוכב חדש מדי פעם, במיקום אקראי — מגרילים את סוגו:
+    // זהב (נדיר מאוד, 10 נק') · כוכב-על (נדיר, 5 נק') · או רגיל (1 נק')
     if (frameCount % STAR_SPAWN_RATE === 0) {
-      const isSuper = Math.random() < SUPER_STAR_CHANCE;   // סיכוי נמוך שזה יהיה כוכב-על ⭐✨
-      const size = isSuper ? SUPER_STAR_SIZE : STAR_SIZE;
+      const r = Math.random();
+      let kind = "normal", size = STAR_SIZE, value = 1;
+      if (r < GOLD_STAR_CHANCE) {
+        kind = "gold"; size = GOLD_STAR_SIZE; value = GOLD_STAR_VALUE;
+      } else if (r < GOLD_STAR_CHANCE + SUPER_STAR_CHANCE) {
+        kind = "super"; size = SUPER_STAR_SIZE; value = SUPER_STAR_VALUE;
+      }
       const x = Math.random() * (canvas.width - size * 2) + size;
       // rot = הזווית הנוכחית, spin = כמה מהר הכוכב מסתובב (אקראי לכל כוכב)
-      stars.push({ x: x, y: -size, rot: 0, spin: (Math.random() - 0.5) * 0.1, size: size, isSuper: isSuper });
+      stars.push({ x: x, y: -size, rot: 0, spin: (Math.random() - 0.5) * 0.1, size: size, kind: kind, value: value });
     }
 
     // יוצרים מוקש חדש מדי פעם, במיקום אקראי
@@ -1134,12 +1171,7 @@
       mines.push({ x: mx, y: -MINE_SIZE });
     }
 
-    // יוצרים בלון ניקוד חדש כל 25 שניות בערך — עולה מלמטה כלפי מעלה 🎈 (רעיון עומר)
-    if (frameCount % BALLOON_SPAWN_FRAMES === 0) {
-      const bx = Math.random() * (canvas.width - BALLOON_SIZE * 2) + BALLOON_SIZE;
-      const color = BALLOON_COLORS[Math.floor(Math.random() * BALLOON_COLORS.length)];
-      balloons.push({ x: bx, y: canvas.height + BALLOON_SIZE, color: color, points: totalScore, size: BALLOON_SIZE });
-    }
+    // (הבלון של כל 25 שניות הוסר — עכשיו הניקוד מוצג ישר על הסלסלה, ראו drawBasket)
 
     // מזיזים את הסלסלה לפי המקלדת (שמאל-ימין, ועכשיו גם למעלה-למטה!)
     if (moveLeft)  basketX -= BASKET_SPEED;
@@ -1155,7 +1187,7 @@
       const star = stars[i];
       star.y += STAR_FALL_SPEED;
       star.rot += star.spin;     // מסובבים את הכוכב מעט → תחושת תלת-ממד
-      drawStar(star.x, star.y, star.size, star.rot, star.isSuper);
+      drawStar(star.x, star.y, star.size, star.rot, star.kind);
 
       // האם הכוכב נתפס בסלסלה? (בודקים שהוא בתוך הרצועה שבה הסלסלה נמצאת עכשיו —
       // חשוב עכשיו שהסלסלה יכולה לזוז למעלה/למטה, לא רק קו קבוע בתחתית)
@@ -1164,7 +1196,7 @@
                      star.x > basketX &&
                      star.x < basketX + BASKET_WIDTH;
       if (caught) {
-        const gained = star.isSuper ? SUPER_STAR_VALUE : 1;   // כוכב-על שווה יותר נקודות ⭐✨
+        const gained = star.value;   // כל סוג כוכב שווה מספר נקודות משלו (רגיל 1 · על 5 · זהב 10)
         score += gained;
         totalScore += gained;   // סופרים גם לסך הכל של כל הריצה (לטבלת השיאים)
         stars.splice(i, 1);   // מוחקים את הכוכב שנתפס
@@ -1239,8 +1271,8 @@
           spawnFirework(mine.x, mine.y);   // הזיקוק במיקום המוקש — הוא זה שמתפוצץ
           playFireworkSound();
           mines.splice(i, 1);
-          if (!star.isSuper) {
-            stars.splice(j, 1);   // כוכב רגיל נעלם; כוכב-על נשאר בחיים
+          if (star.kind === "normal") {
+            stars.splice(j, 1);   // כוכב רגיל נעלם; כוכבים מיוחדים (על/זהב) שורדים
           }
           break;   // המוקש הזה כבר התפוצץ — עוברים לבדוק את המוקש הבא
         }
